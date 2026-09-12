@@ -202,6 +202,75 @@ def main():
         return
 
     state = load_bot_state()
+
+    # ============================================================
+    # چک انقضای توکن (هر ۱۵ دقیقه)
+    # ============================================================
+    # این بخش به‌صورت جداگانه چک می‌کنه که آیا توکن منقضی شده یا نزدیک انقضا
+    # تا کاربر سریع خبردار بشه (بدون صبر کردن برای اجرای monitor)
+    sent_warnings = state.get('sent_warnings', {})
+    current_token = os.getenv('INSHIFT_TOKEN', '')
+
+    if current_token:
+        # ایمپورت محلی برای جلوگیری از circular import
+        sys.path.insert(0, str(SCRIPT_DIR))
+        from inshift_monitor import TokenManager
+
+        hours_left = TokenManager.hours_until_expiry(current_token)
+        logger.info(f"⏰ ساعت‌های باقی‌مانده تا انقضای توکن: {hours_left}")
+
+        if hours_left < 0:
+            # توکن منقضی شده - اگه قبلاً اخطار_EXPIRED نفرستاده بودیم، بفرست
+            if not sent_warnings.get('expired'):
+                send_message(
+                    "🚨 <b>توکن شما منقضی شده!</b>\n\n"
+                    "اسکریپت دیگه نمی‌تونه شیفت‌ها رو چک کنه.\n"
+                    "همین الان یه توکن جدید بگیر و بفرست برام:\n\n"
+                    "1. با Kiwi Browser وارد inshift.digikala.com شو\n"
+                    "2. لاگین کن و برو به صفحه Jobs\n"
+                    "3. F12 → Network → jobs?page=1 → Headers\n"
+                    "4. مقدار Authorization رو کپی کن\n"
+                    "5. همینجا بفرست برام",
+                    parse_mode='HTML'
+                )
+                sent_warnings['expired'] = True
+                # وقتی توکن جدید داد، این flag پاک می‌شه (در بخش دریافت توکن)
+                logger.info("🚨 پیام انقضای توکن ارسال شد.")
+            else:
+                logger.info("ℹ️ پیام انقضا قبلاً ارسال شده، skip.")
+
+        elif hours_left < 24:
+            # کمتر از ۲۴ ساعت - اخطار زودهنگام (فقط یه بار)
+            warning_key = f'warn_{hours_left // 6}'  # هر ۶ ساعت یه اخطار
+            if not sent_warnings.get(warning_key):
+                send_message(
+                    f"⚠️ <b>توکن شما کمتر از ۲۴ ساعت اعتبار داره!</b>\n\n"
+                    f"⏰ زمان باقی‌مانده: <b>{hours_left} ساعت</b>\n\n"
+                    f"بهتره زودتر توکن جدید بگیری و بفرستی.\n"
+                    f"برای راهنما: /help",
+                    parse_mode='HTML'
+                )
+                sent_warnings[warning_key] = True
+                # پاک کردن flag انقضا اگه توکن تازه آپدیت شده
+                sent_warnings.pop('expired', None)
+                logger.info(f"⚠️ اخطار زودهنگام ارسال شد ({hours_left} ساعت).")
+            else:
+                logger.info(f"ℹ️ اخطار {hours_left} ساعت قبلاً ارسال شده.")
+
+        else:
+            # توکن سالمه - پاک کردن همه warning flags
+            if sent_warnings:
+                logger.info("✓ توکن سالمه. پاک کردن warning flags.")
+                sent_warnings.clear()
+
+        state['sent_warnings'] = sent_warnings
+
+    # ذخیره state قبل از ادامه (برای حفظ warning flags)
+    save_bot_state(state)
+
+    # ============================================================
+    # چک پیام‌های تلگرام
+    # ============================================================
     offset = state.get('offset', 0)
 
     updates = get_updates(offset)
@@ -291,12 +360,17 @@ def main():
                 if GH_PAT and GH_REPO:
                     send_message("⏳ در حال ذخیره توکن در GitHub Secrets...")
                     if update_github_secret(token):
+                        # پاک کردن warning flags چون توکن جدید داد
+                        state['sent_warnings'] = {}
+                        save_bot_state(state)
+
                         send_message(
                             "✅ <b>توکن با موفقیت در GitHub Secrets ذخیره شد!</b>\n\n"
-                            "از اجرای بعدی monitor، از توکن جدید استفاده می‌شه.",
+                            "از اجرای بعدی monitor، از توکن جدید استفاده می‌شه.\n"
+                            "🔍 چک شیفت‌ها ادامه پیدا می‌کنه.",
                             parse_mode='HTML'
                         )
-                        logger.info("✓ توکن در GitHub Secret ذخیره شد.")
+                        logger.info("✓ توکن در GitHub Secret ذخیره شد. warning flags پاک شد.")
                     else:
                         send_message(
                             "❌ خطا در ذخیره توکن. لاگ‌های GitHub Actions رو چک کن."

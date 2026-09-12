@@ -114,6 +114,23 @@ class TokenManager:
             return True
 
     @staticmethod
+    def hours_until_expiry(token):
+        """ساعت‌های باقی‌مانده تا انقضای توکن. منفی = منقضی شده."""
+        if not token or '.' not in token:
+            return -1
+        try:
+            parts = token.split('.')
+            if len(parts) != 3:
+                return -1
+            payload_b64 = parts[1] + '=' * (4 - len(parts[1]) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            expire_time = payload.get('expire_time', 0)
+            now = int(time.time())
+            return max(-1, (expire_time - now) // 3600)
+        except Exception:
+            return -1
+
+    @staticmethod
     def get_info(token):
         """اطلاعات توکن برای نمایش."""
         if not token or '.' not in token:
