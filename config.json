@@ -1,0 +1,17 @@
+{
+  "telegram_bot_token": "PUT_YOUR_BOT_TOKEN_HERE",
+  "telegram_chat_id": "PUT_YOUR_CHAT_ID_HERE",
+  "check_interval_minutes": 30,
+  "filters": {
+    "job_titles": ["Stow", "Pick"],
+    "location": "دانش",
+    "start_hour": 7,
+    "start_minute": 0,
+    "end_hour": 17,
+    "end_minute": 0,
+    "exclude_full_capacity": true
+  },
+  "api_url": "https://staffing.digikala.com/api/seeker/v1/jobs?page=1",
+  "request_timeout_seconds": 15,
+  "max_retries": 2
+}

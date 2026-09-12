@@ -1,0 +1,29 @@
+# فایل‌های generated
+token.txt
+state.json
+monitor.log
+cron.log
+token_bot.log
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
