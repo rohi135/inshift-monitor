@@ -1,4 +1,4 @@
-# Dockerfile برای این‌شیفت مانیتور
+# Dockerfile برای مانیتور شیفت
 # استفاده از Python 3.11 slim برای حجم کمتر
 
 FROM python:3.11-slim

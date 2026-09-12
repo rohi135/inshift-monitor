@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-این‌شیفت مانیتور - اپ FastAPI برای Railway
+مانیتور شیفت - اپ FastAPI برای Railway
 =========================================
 این اپ شامل:
   - صفحه وب برای paste کردن توکن JWT
@@ -77,7 +77,7 @@ FILTERS = {
     "exclude_full_capacity": os.getenv('EXCLUDE_FULL_CAPACITY', 'true').lower() == 'true',
 }
 
-API_URL = 'https://staffing.digikala.com/api/seeker/v1/jobs?page=1'
+API_URL = 'https://staffing-api.example.com/api/seeker/v1/jobs?page=1'
 
 # ============================================================
 # ایمپورت‌های داخلی
@@ -86,7 +86,7 @@ import sys
 sys.path.insert(0, str(BASE_DIR))
 
 from proxy_pool import ProxyPool, Proxy
-from inshift_monitor import (
+from shift_monitor import (
     TokenManager, StateManager, JobFilter, Notifier
 )
 
@@ -157,8 +157,8 @@ async def run_job_check():
         'Authorization': token,
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://inshift.digikala.com',
-        'Referer': 'https://inshift.digikala.com/',
+        'Origin': 'https://shift-portal.example.com',
+        'Referer': 'https://shift-portal.example.com/',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0',
     }
     proxies = {'http': proxy.url, 'https': proxy.url}
@@ -292,7 +292,7 @@ async def lifespan(app: FastAPI):
 
     # پیام شروع
     send_telegram(
-        f"🚀 <b>این‌شیفت مانیتور فعال شد!</b>\n\n"
+        f"🚀 <b>مانیتور شیفت فعال شد!</b>\n\n"
         f"⏰ فاصله چک: هر {CHECK_INTERVAL_MINUTES} دقیقه\n"
         f"🔄 Proxy Pool: {proxy_pool.get_stats()['alive']} پروکسی سالم\n"
         f"🎯 فیلتر: {','.join(FILTERS['job_titles'])} در {FILTERS['location']} ساعت "
@@ -319,7 +319,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="Inshift Monitor", lifespan=lifespan)
+app = FastAPI(title="Shift Monitor", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 

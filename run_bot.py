@@ -53,7 +53,7 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
 GH_PAT = os.getenv('GH_PAT', '')
 GH_REPO = os.getenv('GITHUB_REPOSITORY', '')  # auto-set by GitHub Actions
-SECRET_NAME = os.getenv('SECRET_NAME', 'INSHIFT_TOKEN')
+SECRET_NAME = os.getenv('SECRET_NAME', 'INSHIFT_TOKEN')  # GitHub secret name (not visible in code)
 
 # ============================================================
 # ایمپورت کمکی
@@ -209,12 +209,12 @@ def main():
     # این بخش به‌صورت جداگانه چک می‌کنه که آیا توکن منقضی شده یا نزدیک انقضا
     # تا کاربر سریع خبردار بشه (بدون صبر کردن برای اجرای monitor)
     sent_warnings = state.get('sent_warnings', {})
-    current_token = os.getenv('INSHIFT_TOKEN', '')
+    current_token = os.getenv('PORTAL_TOKEN', '')
 
     if current_token:
         # ایمپورت محلی برای جلوگیری از circular import
         sys.path.insert(0, str(SCRIPT_DIR))
-        from inshift_monitor import TokenManager
+        from shift_monitor import TokenManager
 
         hours_left = TokenManager.hours_until_expiry(current_token)
         logger.info(f"⏰ ساعت‌های باقی‌مانده تا انقضای توکن: {hours_left}")
@@ -226,7 +226,7 @@ def main():
                     "🚨 <b>توکن شما منقضی شده!</b>\n\n"
                     "اسکریپت دیگه نمی‌تونه شیفت‌ها رو چک کنه.\n"
                     "همین الان یه توکن جدید بگیر و بفرست برام:\n\n"
-                    "1. با Kiwi Browser وارد inshift.digikala.com شو\n"
+                    "1. با Kiwi Browser وارد shift-portal.example.com شو\n"
                     "2. لاگین کن و برو به صفحه Jobs\n"
                     "3. F12 → Network → jobs?page=1 → Headers\n"
                     "4. مقدار Authorization رو کپی کن\n"
@@ -295,7 +295,7 @@ def main():
         if text == '/start':
             send_message(
                 "👋 سلام!\n\n"
-                "من ربات این‌شیفت مانیتور هستم.\n"
+                "من ربات مانیتور شیفت هستم.\n"
                 "هر زمان توکن منقضی شد، فقط بفرستش برام.\n\n"
                 "📖 /help - راهنما\n"
                 "📊 /status - وضعیت توکن"
@@ -305,7 +305,7 @@ def main():
             send_message(
                 "📖 <b>راهنما</b>\n\n"
                 "<b>چطور توکن جدید بگیرم؟</b>\n"
-                "1. با مرورگر Kiwi وارد inshift.digikala.com شو\n"
+                "1. با مرورگر Kiwi وارد shift-portal.example.com شو\n"
                 "2. لاگین کن و برو به صفحه Jobs\n"
                 "3. منوی Kiwi → Developer Tools\n"
                 "4. تب Network → Fetch/XHR\n"
@@ -320,7 +320,7 @@ def main():
 
         elif text == '/status':
             # بررسی توکن فعلی
-            current_token = os.getenv('INSHIFT_TOKEN', '')
+            current_token = os.getenv('PORTAL_TOKEN', '')
             if current_token and is_valid_jwt(current_token):
                 try:
                     parts = current_token.split('.')

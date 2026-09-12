@@ -117,7 +117,7 @@ def run_bot(bot_token, allowed_chat_id, stop_event=None):
     # پیام خوش‌آمد اولیه
     send_message(
         bot_token, allowed_chat_id,
-        "🤖 <b>ربات این‌شیفت مانیتور فعال شد!</b>\n\n"
+        "🤖 <b>ربات مانیتور شیفت فعال شد!</b>\n\n"
         "هر زمان توکن منقضی شد، می‌تونی توکن جدید رو بفرستی.\n\n"
         "📖 /help - راهنما\n"
         "📊 /status - وضعیت توکن فعلی\n"
@@ -146,7 +146,7 @@ def run_bot(bot_token, allowed_chat_id, stop_event=None):
                 if text == '/start':
                     send_message(bot_token, chat_id,
                         "👋 سلام!\n\n"
-                        "من ربات این‌شیفت مانیتور هستم.\n"
+                        "من ربات مانیتور شیفت هستم.\n"
                         "وقتی توکنت منقضی شد، فقط بفرستش برام.\n\n"
                         "📖 /help - راهنما\n"
                         "📊 /status - وضعیت توکن\n"
@@ -157,7 +157,7 @@ def run_bot(bot_token, allowed_chat_id, stop_event=None):
                     send_message(bot_token, chat_id,
                         "📖 <b>راهنما</b>\n\n"
                         "<b>چطور توکن جدید بگیرم؟</b>\n"
-                        "1. با مرورگر Kiwi وارد inshift.digikala.com شو\n"
+                        "1. با مرورگر Kiwi وارد shift-portal.example.com شو\n"
                         "2. لاگین کن و برو به صفحه Jobs\n"
                         "3. منوی Kiwi → Developer Tools\n"
                         "4. تب Network → روشن کن Fetch/XHR\n"

@@ -41,8 +41,8 @@ SOURCES = {
     'proxifly': 'https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt',
 }
 
-# URL تست سلامت - staffing.digikala.com
-HEALTH_CHECK_URL = 'https://staffing.digikala.com/api/seeker/v1/jobs?page=1'
+# URL تست سلامت - staffing-api.example.com
+HEALTH_CHECK_URL = 'https://staffing-api.example.com/api/seeker/v1/jobs?page=1'
 HEALTH_CHECK_TIMEOUT = 8  # ثانیه
 MAX_POOL_SIZE = 8  # حداکثر تعداد پروکسی سالم در pool
 MIN_POOL_SIZE = 3  # حداقل تعداد پروکسی برای شروع
@@ -371,7 +371,7 @@ class ProxyPool:
             return []
 
     async def _health_check_one(self, proxy: Proxy) -> bool:
-        """تست سلامت یه پروکسی با درخواست به staffing.digikala.com."""
+        """تست سلامت یه پروکسی با درخواست به staffing-api.example.com."""
         proxy_url = proxy.url
         # aiohttp از socks5 پشتیبانی نمی‌کنه به‌صورت پیش‌فرض
         # از requests (sync) در یه thread استفاده می‌کنیم

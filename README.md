@@ -1,6 +1,6 @@
-# 🎯 این‌شیفت مانیتور
+# 🎯 مانیتور شیفت
 
-ربات پایش شیفت‌های **این‌شیفت دیجی‌کالا** که هر ۳۰ دقیقه شیفت‌های جدید رو چک می‌کنه و اگه شیفت با مشخصه‌های مدنظر شما پیدا شد، از طریق **تلگرام** به شما اطلاع می‌ده.
+ربات پایش شیفت‌های **سایت شیفت کمپانی** که هر ۳۰ دقیقه شیفت‌های جدید رو چک می‌کنه و اگه شیفت با مشخصه‌های مدنظر شما پیدا شد، از طریق **تلگرام** به شما اطلاع می‌ده.
 
 ## ✨ ویژگی‌ها
 
@@ -20,9 +20,9 @@
 GitHub Actions (رایگان، ۲۴/۷)
 ├── 📝 Monitor Workflow (هر ۳۰ دقیقه)
 │   ├── نصب پایتون + deps
-│   ├── خوندن INSHIFT_TOKEN از GitHub Secrets
+│   ├── خوندن PORTAL_TOKEN از GitHub Secrets
 │   ├── اجرای Proxy Pool (۴ منبع)
-│   ├── درخواست به staffing.digikala.com
+│   ├── درخواست به staffing-api.example.com
 │   ├── فیلتر Stow/Pick + دانش + 07-17
 │   ├── نوتیف تلگرام اگه match شد
 │   └── commit state.json به ریپو
@@ -56,7 +56,7 @@ https://api.telegram.org/bot<TOKEN>/getUpdates
 |-------------|-------|
 | `TELEGRAM_BOT_TOKEN` | توکن ربات تلگرام |
 | `TELEGRAM_CHAT_ID` | chat id شما |
-| `INSHIFT_TOKEN` | توکن JWT این‌شیفت (نحوه گرفتن در قدم ۶) |
+| `PORTAL_TOKEN` | توکن JWT سایت شیفت (نحوه گرفتن در قدم ۶) |
 | `GH_PAT` | Personal Access Token با scope `repo` (برای آپدیت خودکار توکن) |
 
 ### قدم ۵: (اختیاری) تنظیم متغیرهای فیلتر
@@ -71,10 +71,10 @@ https://api.telegram.org/bot<TOKEN>/getUpdates
 | `FILTER_END_HOUR` | `17` | ساعت پایان |
 | `EXCLUDE_FULL_CAPACITY` | `true` | حذف شیفت‌های پر شده |
 
-### قدم ۶: گرفتن توکن JWT این‌شیفت
+### قدم ۶: گرفتن توکن JWT سایت شیفت
 
 1. **Kiwi Browser** رو روی گوشی نصب کن
-2. وارد `inshift.digikala.com` شو و لاگین کن
+2. وارد `shift-portal.example.com` شو و لاگین کن
 3. به صفحه Jobs برو
 4. منوی Kiwi → **Developer tools**
 5. تب **Network** → فیلتر **Fetch/XHR**
@@ -82,7 +82,7 @@ https://api.telegram.org/bot<TOKEN>/getUpdates
 7. روی `jobs?page=1` کلیک کن
 8. تب **Headers** → **Request Headers**
 9. مقدار `Authorization` رو کپی کن
-10. در GitHub Secrets به‌عنوان `INSHIFT_TOKEN` اضافه کن
+10. در GitHub Secrets به‌عنوان `PORTAL_TOKEN` اضافه کن
 
 ### قدم ۷: ساخت PAT برای آپدیت خودکار توکن (اختیاری)
 
@@ -90,7 +90,7 @@ https://api.telegram.org/bot<TOKEN>/getUpdates
 
 1. برو به https://github.com/settings/tokens
 2. **Generate new token (classic)**
-3. Note: `inshift-bot`
+3. Note: `shift-portal-bot`
 4. Expiration: 90 days (یا بیشتر)
 5. Scope: `repo` (کامل)
 6. Generate و کپی کن
@@ -99,11 +99,11 @@ https://api.telegram.org/bot<TOKEN>/getUpdates
 ### قدم ۸: تست
 
 1. برو به تب **Actions** در ریپو
-2. Workflow به‌نام **Inshift Monitor** رو پیدا کن
+2. Workflow به‌نام **Shift Monitor** رو پیدا کن
 3. روی **Run workflow** بزن
 4. لاگ‌ها رو ببین - باید ببینی:
    ```
-   🚀 GitHub Actions: Inshift Monitor
+   🚀 GitHub Actions: Shift Monitor
    🌐 در حال راه‌اندازی Proxy Pool...
    ✓ Proxy Pool: X پروکسی سالم از Y
    📡 تلاش 1: استفاده از socks5://...
@@ -119,13 +119,13 @@ https://api.telegram.org/bot<TOKEN>/getUpdates
 ## 📁 ساختار فایل‌ها
 
 ```
-inshift-monitor/
+shift-portal-monitor/
 ├── .github/workflows/
 │   ├── monitor.yml              # Workflow هر ۳۰ دقیقه
 │   └── telegram-bot.yml         # Workflow هر ۵ دقیقه (برای آپدیت توکن)
 ├── run_monitor.py               # اسکریپت اصلی (single-run)
 ├── run_bot.py                   # ربات تلگرام (single-run)
-├── inshift_monitor.py           # ماژول مشترک (Token, Filter, Notifier)
+├── shift_monitor.py           # ماژول مشترک (Token, Filter, Notifier)
 ├── proxy_pool.py                # مدیریت پروکسی‌های ایرانی
 ├── token_updater_bot.py         # (اختیاری) نسخه always-on برای Termux/VPS
 ├── main.py                      # (اختیاری) FastAPI app برای Railway
@@ -185,7 +185,7 @@ inshift-monitor/
 | توکن تلگرام | در GitHub Secrets |
 | PAT | در GitHub Secrets |
 | TLS Verification | همیشه روشن - جلوگیری از MITM |
-| HTTPS | همه درخواست‌ها به دیجی‌کالا HTTPS هستن |
+| HTTPS | همه درخواست‌ها به کمپانی HTTPS هستن |
 
 > ⚠️ توکن JWT = پسورد لاگین شماست. هرگز به کسی نده.
 
@@ -209,7 +209,7 @@ inshift-monitor/
 
 ### روش ۲: دستی از طریق GitHub UI
 1. توکن جدید رو از Kiwi Browser بگیر
-2. ریپو → Settings → Secrets → `INSHIFT_TOKEN` → Update
+2. ریپو → Settings → Secrets → `PORTAL_TOKEN` → Update
 3. Paste کن و Save
 
 ## 🐛 عیب‌یابی

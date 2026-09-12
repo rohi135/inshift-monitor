@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-این‌شیفت مانیتور - ماژول اصلی
+مانیتور شیفت - ماژول اصلی
 ================================
 این ماژول شامل کلاس‌های مشترک برای:
   - مدیریت توکن JWT
@@ -188,9 +188,10 @@ class StateManager:
 class JobFetcher:
     def __init__(self, config=None):
         self.config = config or {}
-        self.url = self.config.get(
-            'api_url',
-            'https://staffing.digikala.com/api/seeker/v1/jobs?page=1'
+        # API URL from config or env var (don't hardcode the actual URL)
+        self.url = self.config.get('api_url') or os.getenv(
+            'API_URL',
+            'https://staffing-api.example.com/api/seeker/v1/jobs?page=1'
         )
         self.timeout = self.config.get('request_timeout_seconds', 15)
         self.max_retries = self.config.get('max_retries', 2)
@@ -205,17 +206,15 @@ class JobFetcher:
 
         Returns:
             tuple: (data, error)
-            data: dict یا None
-            error: None یا یکی از: 'TOKEN_EXPIRED', 'IP_BLOCKED',
-                   'NO_INTERNET', 'MAX_RETRIES_EXCEEDED', 'HTTP_xxx',
-                   'UNKNOWN_ERROR'
         """
+        # Origin/Referer from env var (don't hardcode)
+        origin = os.getenv('PORTAL_ORIGIN', 'https://shift-portal.example.com')
         headers = {
             'Authorization': token,
             'Accept': 'application/json, text/plain, */*',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Origin': 'https://inshift.digikala.com',
-            'Referer': 'https://inshift.digikala.com/',
+            'Origin': origin,
+            'Referer': origin + '/',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0',
             'Sec-Fetch-Dest': 'empty',
             'Sec-Fetch-Mode': 'cors',
@@ -388,7 +387,7 @@ class Notifier:
             f"🕐 <b>ساعت:</b> {start} تا {end}\n"
             f"💰 <b>دستمزد:</b> {price_t} تومان\n"
             f"🆔 <b>کد:</b> <code>{hash_id}</code>\n\n"
-            f"🔗 <a href=\"https://inshift.digikala.com/jobs\">باز کردن سایت</a>"
+            f"🔗 <a href=\"https://shift-portal.example.com/jobs\">باز کردن سایت</a>"
         )
         self.send_telegram(tg_text)
 

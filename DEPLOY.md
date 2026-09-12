@@ -1,6 +1,6 @@
 # 🚀 راهنمای Deploy با GitHub Actions
 
-این راهنما قدم‌به‌قدم نحوه راه‌اندازی این‌شیفت مانیتور با GitHub Actions (کاملاً رایگان) رو توضیح می‌ده.
+این راهنما قدم‌به‌قدم نحوه راه‌اندازی مانیتور شیفت با GitHub Actions (کاملاً رایگان) رو توضیح می‌ده.
 
 ## ✅ مزایا
 
@@ -16,7 +16,7 @@
 
 - یه اکانت GitHub (رایگان)
 - یه ربات تلگرام (از @BotFather)
-- توکن JWT این‌شیفت (با Kiwi Browser می‌گیری)
+- توکن JWT سایت شیفت (با Kiwi Browser می‌گیری)
 - (اختیاری) Personal Access Token برای آپدیت خودکار توکن
 
 ---
@@ -26,8 +26,8 @@
 اگه ریپو رو فورک کردی، خودکار در اکانت تو هست. اگه نه:
 
 ```bash
-git clone https://github.com/rohnavaz07-ai/inshift-monitor.git
-cd inshift-monitor
+git clone https://github.com/rohnavaz07-ai/shift-portal-monitor.git
+cd shift-portal-monitor
 ```
 
 ---
@@ -36,8 +36,8 @@ cd inshift-monitor
 
 1. در تلگرام به **@BotFather** پیام بده
 2. دستور `/newbot` رو بفرست
-3. یه اسم انتخاب کن (مثل "Inshift Monitor")
-4. یه username انتخاب کن (مثل `my_inshift_bot`)
+3. یه اسم انتخاب کن (مثل "Shift Monitor")
+4. یه username انتخاب کن (مثل `my_shift-portal_bot`)
 5. **توکن** رو کپی کن (مثل: `1234567890:ABCdefGHIjklmNOP...`)
 
 ## 🎯 قدم ۳: گرفتن Chat ID خودت
@@ -61,7 +61,7 @@ cd inshift-monitor
 |-------------|-------|
 | `TELEGRAM_BOT_TOKEN` | توکن ربات تلگرام |
 | `TELEGRAM_CHAT_ID` | chat id شما |
-| `INSHIFT_TOKEN` | توکن JWT (قدم ۶ رو ببین) |
+| `PORTAL_TOKEN` | توکن JWT (قدم ۶ رو ببین) |
 
 ### اختیاری (برای آپدیت خودکار توکن):
 
@@ -86,10 +86,10 @@ cd inshift-monitor
 
 ---
 
-## 🎯 قدم ۶: گرفتن توکن JWT این‌شیفت
+## 🎯 قدم ۶: گرفتن توکن JWT سایت شیفت
 
 1. **Kiwi Browser** رو روی گوشی نصب کن (از Play Store)
-2. وارد `inshift.digikala.com` شو و لاگین کن
+2. وارد `shift-portal.example.com` شو و لاگین کن
 3. به صفحه Jobs برو
 4. منوی Kiwi (سه نقطه) → **Developer tools**
 5. تب **Network** → فیلتر **Fetch/XHR**
@@ -97,7 +97,7 @@ cd inshift-monitor
 7. روی `jobs?page=1` کلیک کن
 8. تب **Headers** → **Request Headers**
 9. مقدار `Authorization` رو کپی کن (یه رشته طولانی که با `eyJ` شروع می‌شه)
-10. در GitHub Secrets به‌عنوان `INSHIFT_TOKEN` اضافه کن
+10. در GitHub Secrets به‌عنوان `PORTAL_TOKEN` اضافه کن
 
 ---
 
@@ -108,7 +108,7 @@ cd inshift-monitor
 1. برو به https://github.com/settings/tokens
 2. **Generate new token (classic)**
 3. تنظیمات:
-   - Note: `inshift-bot`
+   - Note: `shift-portal-bot`
    - Expiration: 90 days (یا بیشتر)
    - Scope: `repo` (تیک کامل)
 4. **Generate token** رو بزن
@@ -122,7 +122,7 @@ cd inshift-monitor
 1. برو به تب **Actions** در ریپو
 2. اگه warning دیدی درباره workflows، **I understand my workflows, go ahead and enable them** رو بزن
 3. دو تا workflow می‌بینی:
-   - **Inshift Monitor** - هر ۳۰ دقیقه
+   - **Shift Monitor** - هر ۳۰ دقیقه
    - **Telegram Bot** - هر ۵ دقیقه
 
 ---
@@ -131,13 +131,13 @@ cd inshift-monitor
 
 ### تست دستی Monitor:
 
-1. در تب Actions، روی **Inshift Monitor** بزن
+1. در تب Actions، روی **Shift Monitor** بزن
 2. دکمه **Run workflow** رو بزن
 3. صبر کن تا کامل بشه (حدود ۱-۲ دقیقه)
 4. روی run کلیک کن و لاگ‌ها رو ببین
 5. باید ببینی:
    ```
-   🚀 GitHub Actions: Inshift Monitor - 2026-09-13 12:00:00
+   🚀 GitHub Actions: Shift Monitor - 2026-09-13 12:00:00
    🌐 در حال راه‌اندازی Proxy Pool...
    ✓ Proxy Pool: 5 پروکسی سالم از 50
    📡 تلاش 1: استفاده از socks5://1.2.3.4:1080
@@ -195,8 +195,8 @@ cd inshift-monitor
 2. مطمئن شو secrets درست set شدن (غلط‌املایی ندارن)
 3. workflow رو دستی Run کن و لاگ رو ببین
 
-### مشکل: لاگ می‌گه "INSHIFT_TOKEN تنظیم نشده"
-1. ریپو → Settings → Secrets → بررسی کن `INSHIFT_TOKEN` اضافه شده
+### مشکل: لاگ می‌گه "PORTAL_TOKEN تنظیم نشده"
+1. ریپو → Settings → Secrets → بررسی کن `PORTAL_TOKEN` اضافه شده
 2. اگه نبود، اضافه کن
 3. workflow رو دوباره Run کن
 

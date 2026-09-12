@@ -4,7 +4,7 @@
 Runner برای GitHub Actions - اجرای یک‌باره با Proxy Pool
 ============================================================
 این اسکریپت در GitHub Actions اجرا می‌شه و:
-  1. توکن رو از env var (INSHIFT_TOKEN) می‌خونه
+  1. توکن رو از env var (PORTAL_TOKEN) می‌خونه
   2. Proxy Pool رو راه‌اندازی می‌کنه
   3. درخواست به API می‌فرسته
   4. فیلتر می‌کنه
@@ -12,7 +12,7 @@ Runner برای GitHub Actions - اجرای یک‌باره با Proxy Pool
   6. state.json رو آپدیت می‌کنه (workflow بعدی commit می‌کنه)
 
 نحوه اجرای محلی برای تست:
-  INSHIFT_TOKEN=eyJ... TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... python run_monitor.py
+  PORTAL_TOKEN=eyJ... TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... python run_monitor.py
 """
 
 import os
@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # ایمپورت‌های داخلی
 # ============================================================
 from proxy_pool import ProxyPool
-from inshift_monitor import (
+from shift_monitor import (
     TokenManager, StateManager, JobFilter, Notifier, JobFetcher
 )
 
@@ -67,7 +67,7 @@ def get_config():
             'end_minute': int(os.getenv('FILTER_END_MINUTE', '0')),
             'exclude_full_capacity': os.getenv('EXCLUDE_FULL_CAPACITY', 'true').lower() == 'true',
         },
-        'api_url': 'https://staffing.digikala.com/api/seeker/v1/jobs?page=1',
+        'api_url': os.getenv('API_URL', 'https://staffing-api.example.com/api/seeker/v1/jobs?page=1'),
         'request_timeout_seconds': 15,
         'max_retries': 2,
     }
@@ -78,7 +78,7 @@ def get_config():
 # ============================================================
 async def main():
     logger.info("=" * 60)
-    logger.info(f"🚀 GitHub Actions: Inshift Monitor - {datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"🚀 GitHub Actions: Shift Monitor - {datetime.now(TEHRAN_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
 
     config = get_config()
@@ -91,14 +91,14 @@ async def main():
         return False
 
     # خوندن توکن (از env var یا فایل)
-    token = os.getenv('INSHIFT_TOKEN')
+    token = os.getenv('PORTAL_TOKEN')
     if not token:
         # برای تست محلی، از فایل بخون
         token = TokenManager.load()
 
     if not token:
-        logger.error("❌ توکن یافت نشد! INSHIFT_TOKEN secret رو تنظیم کن.")
-        notifier.notify_error('TOKEN_EXPIRED', 'INSHIFT_TOKEN تنظیم نشده.')
+        logger.error("❌ توکن یافت نشد! PORTAL_TOKEN secret رو تنظیم کن.")
+        notifier.notify_error('TOKEN_EXPIRED', 'PORTAL_TOKEN تنظیم نشده.')
         return False
 
     if TokenManager.is_expired(token):
@@ -126,7 +126,7 @@ async def main():
         notifier.notify_error('PROXY_ERROR', 'هیچ پروکسی‌ای از منابع fetch نشد.')
         return False
 
-    # تابع تست پروکسی - درخواست واقعی به API دیجی‌کالا
+    # تابع تست پروکسی - درخواست واقعی به API کمپانی
     fetcher = JobFetcher(config)
 
     def test_proxy(proxy):

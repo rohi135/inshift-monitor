@@ -1,4 +1,4 @@
-name: Inshift Monitor
+name: Shift Monitor
 
 # این workflow هر ۳۰ دقیقه اجرا می‌شه
 # همچنین می‌تونی دستی هم اجرا کنی
@@ -35,10 +35,10 @@ jobs:
 
       - name: 📝 Create token.txt from secret
         env:
-          INSHIFT_TOKEN: ${{ secrets.INSHIFT_TOKEN }}
+          PORTAL_TOKEN: ${{ secrets.INSHIFT_TOKEN }}
         run: |
-          if [ -n "$INSHIFT_TOKEN" ]; then
-            echo "$INSHIFT_TOKEN" > token.txt
+          if [ -n "$PORTAL_TOKEN" ]; then
+            echo "$PORTAL_TOKEN" > token.txt
             echo "✓ token.txt created from secret"
           else
             echo "⚠️  INSHIFT_TOKEN secret is not set"
@@ -49,7 +49,9 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          INSHIFT_TOKEN: ${{ secrets.INSHIFT_TOKEN }}
+          PORTAL_TOKEN: ${{ secrets.INSHIFT_TOKEN }}
+          API_URL: ${{ secrets.API_URL }}
+          PORTAL_ORIGIN: ${{ secrets.PORTAL_ORIGIN }}
           FILTER_JOB_TITLES: ${{ vars.FILTER_JOB_TITLES || 'Stow,Pick' }}
           FILTER_LOCATION: ${{ vars.FILTER_LOCATION || 'دانش' }}
           FILTER_START_HOUR: ${{ vars.FILTER_START_HOUR || '7' }}
