@@ -59,7 +59,6 @@ SECRET_NAME = os.getenv('SECRET_NAME', 'INSHIFT_TOKEN')
 # ایمپورت کمکی
 # ============================================================
 sys.path.insert(0, str(SCRIPT_DIR))
-from inshift_monitor import is_valid_jwt  # not quite, but we re-define below
 
 
 def is_valid_jwt(token):
