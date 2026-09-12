@@ -1,4 +1,4 @@
-# FastAPI + Uvicorn
+# FastAPI (برای حالت Railway - اختیاری)
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 jinja2==3.1.4
@@ -9,8 +9,8 @@ requests==2.32.3
 aiohttp==3.10.5
 PySocks==1.7.1
 
-# Scheduler
+# Scheduler (برای حالت Railway - اختیاری)
 apscheduler==3.10.4
 
-# Telegram bot (lightweight, no extra deps)
-# (از requests استفاده می‌کنیم، نیاز به کتابخانه جدا نیست)
+# برای encrypt کردن GitHub Secrets (در run_bot.py)
+pynacl==1.5.0
