@@ -110,55 +110,63 @@ async def main():
     if info:
         logger.info(f"✓ توکن معتبر. User ID: {info.get('user_id')}")
 
-    # راه‌اندازی Proxy Pool
-    logger.info("🌐 در حال راه‌اندازی Proxy Pool...")
-    pool = ProxyPool(refresh_interval_minutes=60)  # در اجرای یک‌باره، refresh اتفاق نمی‌افته
+    # راه‌اندازی Proxy Pool - حالت lazy (بدون health check کامل)
+    logger.info("🌐 در حال راه‌اندازی Proxy Pool (lazy mode)...")
+    pool = ProxyPool(refresh_interval_minutes=60)
     try:
-        await pool.initialize()
+        await pool.initialize(lazy=True)
     except Exception as e:
         logger.error(f"خطا در proxy pool: {e}")
 
     stats = pool.get_stats()
-    logger.info(f"✓ Proxy Pool: {stats['alive']} پروکسی سالم از {stats['total']}")
+    logger.info(f"✓ Proxy Pool: {stats['total']} پروکسی fetch شد (بدون تست)")
 
-    if stats['alive'] == 0:
-        logger.error("❌ هیچ پروکسی ایرانی سالمی موجود نیست!")
-        notifier.notify_error('PROXY_ERROR', 'هیچ پروکسی ایرانی سالمی موجود نیست.')
+    if stats['total'] == 0:
+        logger.error("❌ هیچ پروکسی‌ای fetch نشد!")
+        notifier.notify_error('PROXY_ERROR', 'هیچ پروکسی‌ای از منابع fetch نشد.')
         return False
 
-    # گرفتن پروکسی و fetch
+    # تابع تست پروکسی - درخواست واقعی به API دیجی‌کالا
     fetcher = JobFetcher(config)
-    data = None
-    error = None
 
-    # تلاش با چند پروکسی
-    for attempt in range(3):
-        proxy = await pool.get_proxy()
-        if not proxy:
-            logger.error("❌ پروکسی موجود نیست!")
-            break
+    def test_proxy(proxy):
+        """تست پروکسی با درخواست واقعی به API.
 
-        logger.info(f"📡 تلاش {attempt + 1}: استفاده از {proxy.url}")
-        data, error = fetcher.fetch(token, proxy_url=proxy.url)
-
-        if data:
-            logger.info(f"✓ موفق! {len(data.get('data', []))} شیفت دریافت شد.")
-            break
-
-        if error == 'TOKEN_EXPIRED':
-            notifier.notify_error('TOKEN_EXPIRED')
+        Returns:
+            - True اگه پروکسی کار کرد (HTTP 200 یا 401)
+            - False در غیر این صورت
+        """
+        try:
+            data, error = fetcher.fetch(token, proxy_url=proxy.url)
+            # 200 = موفق کامل، 401 = پروکسی کار می‌کنه ولی توکن مشکل داره (برای پروکسی مهم نیست)
+            if data or error == 'TOKEN_EXPIRED':
+                return True
             return False
-        elif error == 'IP_BLOCKED' or error == 'PROXY_ERROR':
-            logger.warning(f"پروکسی {proxy.url} کار نکرد: {error}")
-            await pool.mark_failed(proxy)
-            continue
-        else:
-            logger.error(f"خطای ناشناخته: {error}")
-            break
+        except Exception:
+            return False
+
+    # پیدا کردن اولین پروکسی کارکردی
+    logger.info("🔍 تست پروکسی‌ها یکی یکی تا پیدا کردن اولین کارکردی...")
+    proxy = await pool.find_working_proxy(test_proxy, max_attempts=15)
+
+    if not proxy:
+        logger.error("❌ هیچ پروکسی کارکردی پیدا نشد!")
+        notifier.notify_error('PROXY_ERROR', 'هیچ پروکسی کارکردی پیدا نشد.')
+        return False
+
+    logger.info(f"✓ استفاده از پروکسی: {proxy.url}")
+
+    # حالا با پروکسی کارکردی، درخواست اصلی رو بزن
+    data, error = fetcher.fetch(token, proxy_url=proxy.url)
 
     if not data:
-        notifier.notify_error(error or 'UNKNOWN_ERROR')
+        if error == 'TOKEN_EXPIRED':
+            notifier.notify_error('TOKEN_EXPIRED')
+        else:
+            notifier.notify_error(error or 'UNKNOWN_ERROR')
         return False
+
+    logger.info(f"✓ موفق! {len(data.get('data', []))} شیفت دریافت شد.")
 
     # فیلتر شیفت‌ها
     job_filter = JobFilter(config['filters'])

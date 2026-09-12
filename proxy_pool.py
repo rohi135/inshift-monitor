@@ -87,14 +87,78 @@ class ProxyPool:
         self._index = 0
         self._lock = asyncio.Lock()
 
-    async def initialize(self):
-        """راه‌اندازی اولیه pool."""
-        logger.info("در حال راه‌اندازی Proxy Pool...")
-        await self.refresh()
-        logger.info(f"Proxy Pool آماده. {len(self.proxies)} پروکسی سالم.")
+    async def initialize(self, lazy=False):
+        """راه‌اندازی اولیه pool.
 
-    async def refresh(self):
-        """Fetch پروکسی‌های جدید از همه منابع + health check."""
+        Args:
+            lazy: اگه True باشه، فقط fetch می‌کنه بدون health check.
+               مناسب GitHub Actions که زمان محدود داره.
+        """
+        logger.info("در حال راه‌اندازی Proxy Pool...")
+        await self.refresh(skip_health_check=lazy)
+        if lazy:
+            logger.info(f"Proxy Pool آماده (lazy mode). {len(self.proxies)} پروکسی fetch شد.")
+        else:
+            logger.info(f"Proxy Pool آماده. {len(self.proxies)} پروکسی سالم.")
+
+    async def find_working_proxy(self, test_func, max_attempts=15):
+        """
+        پیدا کردن اولین پروکسی کارکردی با تست زنده.
+
+        به‌جای تست کردن همه پروکسی‌ها، یکی یکی تست می‌کنه و به اولین
+        پروکسی که کار کنه، برمی‌گرده. بسیار سریع‌تر از health check کامل.
+
+        Args:
+            test_func: یه callable که proxy رو می‌گیره و bool برمی‌گردونه.
+                       می‌تونه async یا sync باشه.
+            max_attempts: حداکثر تعداد پروکسی برای تست (default 15).
+
+        Returns:
+            Proxy یا None اگه هیچ کدوم کار نکرد.
+        """
+        if not self.proxies:
+            await self.refresh(skip_health_check=True)
+            if not self.proxies:
+                return None
+
+        candidates = self.proxies[:max_attempts]
+        logger.info(f"🔍 تست {len(candidates)} پروکسی برای پیدا کردن اولین کارکردی...")
+
+        for i, proxy in enumerate(candidates):
+            try:
+                if asyncio.iscoroutinefunction(test_func):
+                    result = await test_func(proxy)
+                else:
+                    result = await asyncio.get_event_loop().run_in_executor(
+                        None, test_func, proxy
+                    )
+
+                if result:
+                    proxy.is_alive = True
+                    proxy.last_success = time.time()
+                    proxy.fail_count = 0
+                    logger.info(f"✓ پروکسی شماره {i+1} کار کرد: {proxy.url}")
+                    return proxy
+                else:
+                    proxy.fail_count += 1
+                    proxy.is_alive = False
+                    logger.debug(f"✗ پروکسی شماره {i+1} کار نکرد: {proxy.url}")
+
+            except Exception as e:
+                proxy.fail_count += 1
+                proxy.is_alive = False
+                logger.debug(f"✗ پروکسی {proxy.url} خطا: {e}")
+
+        logger.warning(f"❌ هیچ‌کدوم از {len(candidates)} پروکسی کار نکرد!")
+        return None
+
+    async def refresh(self, skip_health_check=False):
+        """Fetch پروکسی‌های جدید از همه منابع + health check.
+
+        Args:
+            skip_health_check: اگه True باشه، فقط fetch می‌کنه بدون تست.
+               (برای حالت lazy - پیدا کردن اولین پروکسی سالم با تابع تست کاربر)
+        """
         logger.info("شروع refresh proxy pool...")
 
         # fetch از همه منابع به‌صورت موازی
@@ -127,6 +191,15 @@ class ProxyPool:
 
         if not unique_proxies:
             logger.warning("هیچ پروکسی‌ای fetch نشد!")
+            return
+
+        if skip_health_check:
+            # فقط fetch کن، بدون تست (برای lazy mode)
+            self.proxies = unique_proxies[:MAX_POOL_SIZE * 3]  # نگه‌داشتن تعداد بیشتر
+            for p in self.proxies:
+                p.is_alive = True  # فرض می‌کنیم سالمه، تست بعداً
+            self.last_refresh = time.time()
+            logger.info(f"Pool آماده (بدون health check): {len(self.proxies)} پروکسی")
             return
 
         # health check موازی
