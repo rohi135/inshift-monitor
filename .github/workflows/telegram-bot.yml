@@ -1,13 +1,13 @@
 name: Telegram Bot
 
-# این workflow هر ۵ دقیقه اجرا می‌شه
+# این workflow هر ۱۵ دقیقه اجرا می‌شه
 # پیام‌های جدید تلگرام رو چک می‌کنه
 # اگه توکن JWT فرستاده باشی، خودکار در GitHub Secret ذخیره می‌کنه
 
 on:
   schedule:
-    # هر ۵ دقیقه (حداقل interval توصیه شده)
-    - cron: '*/5 * * * *'
+    # هر ۱۵ دقیقه (بهینه برای جلوگیری از delay و rate limit)
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
