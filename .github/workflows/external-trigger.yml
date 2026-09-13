@@ -45,7 +45,7 @@ jobs:
                   now = datetime.now(timezone.utc)
                   diff_min = (now - created).total_seconds() / 60
                   print(f'{int(diff_min)}')
-                  return
+                  sys.exit(0)
           print('')
           ")
 
@@ -60,10 +60,10 @@ jobs:
             fi
           }
 
-          # Shift Monitor: threshold 35 min (هر ۳۰ دقیقه باید اجرا بشه)
+          # Shift Monitor: threshold 35 min
           check_workflow "monitor.yml" 35
 
-          # Telegram Bot: threshold 20 min (هر ۱۵ دقیقه باید اجرا بشه)
+          # Telegram Bot: threshold 20 min
           check_workflow "telegram-bot.yml" 20
 
       - name: 🚀 Trigger Shift Monitor
