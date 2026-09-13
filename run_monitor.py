@@ -126,21 +126,29 @@ async def main():
         notifier.notify_error('PROXY_ERROR', 'هیچ پروکسی‌ای از منابع fetch نشد.')
         return False
 
-    # تابع تست پروکسی - درخواست واقعی به API کمپانی
+    # تابع تست پروکسی - درخواست واقعی به API
     fetcher = JobFetcher(config)
+    final_data = [None]  # برای ذخیره data موفق
 
     def test_proxy(proxy):
         """تست پروکسی با درخواست واقعی به API.
 
+        این تابع همزمان هم پروکسی رو تست می‌کنه هم درخواست اصلی رو انجام می‌ده.
+        اگه موفق بشه، data رو در final_data ذخیره می‌کنه.
+
         Returns:
-            - True اگه پروکسی کار کرد (HTTP 200 یا 401)
+            - True اگه پروکسی کار کرد و data دریافت شد
             - False در غیر این صورت
         """
         try:
             data, error = fetcher.fetch(token, proxy_url=proxy.url)
-            # 200 = موفق کامل، 401 = پروکسی کار می‌کنه ولی توکن مشکل داره (برای پروکسی مهم نیست)
-            if data or error == 'TOKEN_EXPIRED':
+            # 200 = موفق کامل
+            if data:
+                final_data[0] = data
                 return True
+            # 401 = توکن منقضی شده (پروکسی کار می‌کنه ولی توکن مشکل داره)
+            if error == 'TOKEN_EXPIRED':
+                return True  # پروکسی سالمه، توکن مشکل داره
             return False
         except Exception:
             return False
@@ -156,17 +164,16 @@ async def main():
 
     logger.info(f"✓ استفاده از پروکسی: {proxy.url}")
 
-    # حالا با پروکسی کارکردی، درخواست اصلی رو بزن
-    data, error = fetcher.fetch(token, proxy_url=proxy.url)
+    # اگه data رو از تابع تست گرفتیم، استفاده کنیم
+    data = final_data[0]
 
     if not data:
-        if error == 'TOKEN_EXPIRED':
-            notifier.notify_error('TOKEN_EXPIRED')
-        else:
-            notifier.notify_error(error or 'UNKNOWN_ERROR')
+        # یعنی پروکسی کار کرد ولی توکن منقضی شده (error = TOKEN_EXPIRED)
+        notifier.notify_error('TOKEN_EXPIRED')
         return False
 
     logger.info(f"✓ موفق! {len(data.get('data', []))} شیفت دریافت شد.")
+
 
     # فیلتر شیفت‌ها
     job_filter = JobFilter(config['filters'])
