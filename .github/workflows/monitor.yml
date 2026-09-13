@@ -1,13 +1,12 @@
 name: Shift Monitor
 
-# این workflow هر ۳۰ دقیقه اجرا می‌شه
-# همچنین می‌تونی دستی هم اجرا کنی
+# این workflow فقط با External Trigger (cron-job.org) یا دستی اجرا می‌شه
+# GitHub Schedule حذف شده تا رندوم اجرا نشه
 
 on:
-  schedule:
-    # هر ۳۰ دقیقه (UTC)
-    - cron: '*/30 * * * *'
   workflow_dispatch:  # اجرای دستی از GitHub UI
+  repository_dispatch:  # اجرا با External Trigger
+    types: [run-monitor]
 
 # اجازه commit کردن state.json
 permissions:

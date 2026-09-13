@@ -1,14 +1,12 @@
 name: Telegram Bot
 
-# این workflow هر ۳۰ دقیقه اجرا می‌شه (۱۵ دقیقه بعد از Shift Monitor)
-# پیام‌های جدید تلگرام رو چک می‌کنه
-# اگه توکن JWT فرستاده باشی، خودکار در GitHub Secret ذخیره می‌کنه
+# این workflow فقط با External Trigger (cron-job.org) یا دستی اجرا می‌شه
+# GitHub Schedule حذف شده تا رندوم اجرا نشه
 
 on:
-  schedule:
-    # هر ۳۰ دقیقه، ۱۵ دقیقه بعد از Shift Monitor (که در دقیقه 0 و 30 اجرا می‌شه)
-    - cron: '15,45 * * * *'
-  workflow_dispatch:
+  workflow_dispatch:  # اجرای دستی از GitHub UI
+  repository_dispatch:  # اجرا با External Trigger
+    types: [run-bot]
 
 permissions:
   contents: write
