@@ -52,5 +52,7 @@ jobs:
             echo "No bot state changes."
           else
             git commit -m "chore: update bot state [skip ci]"
-            git push
+            # Pull rebase in case other workflow pushed meanwhile
+            git pull --rebase origin main || true
+            git push || echo "Push failed, will retry next run"
           fi
