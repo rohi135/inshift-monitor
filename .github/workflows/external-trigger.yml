@@ -1,0 +1,78 @@
+name: External Trigger
+
+# این workflow با درخواست HTTP از cron-job.org (یا هر سرویس خارجی) اجرا می‌شه
+# اگه ساعت آخر اجرا بیش از ۳۵ دقیقه گذشته باشه، Shift Monitor رو اجرا می‌کنه
+
+on:
+  repository_dispatch:
+    types: [trigger-monitor]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🕐 Check last monitor run
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking last Shift Monitor run..."
+          # Get last successful monitor run
+          LAST_RUN=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/monitor.yml/runs?status=completed&per_page=5" \
+            | python3 -c "
+          import sys, json
+          from datetime import datetime, timezone, timedelta
+          TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
+          d = json.load(sys.stdin)
+          for run in d.get('workflow_runs', []):
+              if run.get('conclusion') == 'success':
+                  created = datetime.fromisoformat(run['created_at'].replace('Z', '+00:00'))
+                  now = datetime.now(timezone.utc)
+                  diff_min = (now - created).total_seconds() / 60
+                  print(f'{int(diff_min)}')
+                  break
+          ")
+
+          echo "Last successful run was $LAST_RUN minutes ago"
+          echo "last_run=$LAST_RUN" >> $GITHUB_OUTPUT
+
+          # اگه بیش از ۳۵ دقیقه گذشته، trigger کن
+          if [ -z "$LAST_RUN" ] || [ "$LAST_RUN" -gt 35 ]; then
+            echo "Should trigger: yes"
+            echo "should_trigger=true" >> $GITHUB_OUTPUT
+          else
+            echo "Should trigger: no (recent run exists)"
+            echo "should_trigger=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🚀 Trigger Shift Monitor
+        if: steps.check.outputs.should_trigger == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering Shift Monitor workflow..."
+          curl -s -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/monitor.yml/dispatches" \
+            -d '{"ref":"main"}' \
+            -w "HTTP Status: %{http_code}\n"
+
+      - name: 📊 Summary
+        run: |
+          echo "## External Trigger Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Last run:** ${{ steps.check.outputs.last_run }} minutes ago" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered monitor:** ${{ steps.check.outputs.should_trigger }}" >> $GITHUB_STEP_SUMMARY
