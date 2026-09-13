@@ -1,7 +1,7 @@
 name: External Trigger
 
 # این workflow با درخواست HTTP از cron-job.org (یا هر سرویس خارجی) اجرا می‌شه
-# اگه ساعت آخر اجرا بیش از ۳۵ دقیقه گذشته باشه، Shift Monitor رو اجرا می‌کنه
+# اگه ساعت آخر اجرای هر کدوم از workflowها بیش از حد گذشته باشه، triggerشون می‌کنه
 
 on:
   repository_dispatch:
@@ -21,20 +21,23 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🕐 Check last monitor run
+      - name: 🕐 Check last runs
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Checking last Shift Monitor run..."
-          # Get last successful monitor run
-          LAST_RUN=$(curl -s -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/monitor.yml/runs?status=completed&per_page=5" \
-            | python3 -c "
+          check_workflow() {
+            local workflow_name="$1"
+            local threshold_min="$2"
+
+            echo "Checking $workflow_name (threshold: ${threshold_min} min)..."
+
+            LAST_RUN=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/${workflow_name}/runs?status=completed&per_page=10" \
+              | python3 -c "
           import sys, json
-          from datetime import datetime, timezone, timedelta
-          TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
+          from datetime import datetime, timezone
           d = json.load(sys.stdin)
           for run in d.get('workflow_runs', []):
               if run.get('conclusion') == 'success':
@@ -42,27 +45,33 @@ jobs:
                   now = datetime.now(timezone.utc)
                   diff_min = (now - created).total_seconds() / 60
                   print(f'{int(diff_min)}')
-                  break
+                  return
+          print('')
           ")
 
-          echo "Last successful run was $LAST_RUN minutes ago"
-          echo "last_run=$LAST_RUN" >> $GITHUB_OUTPUT
+            echo "  Last success: ${LAST_RUN:-never} minutes ago"
 
-          # اگه بیش از ۳۵ دقیقه گذشته، trigger کن
-          if [ -z "$LAST_RUN" ] || [ "$LAST_RUN" -gt 35 ]; then
-            echo "Should trigger: yes"
-            echo "should_trigger=true" >> $GITHUB_OUTPUT
-          else
-            echo "Should trigger: no (recent run exists)"
-            echo "should_trigger=false" >> $GITHUB_OUTPUT
-          fi
+            if [ -z "$LAST_RUN" ] || [ "$LAST_RUN" -gt "$threshold_min" ]; then
+              echo "  → Should trigger: yes"
+              echo "should_trigger_${workflow_name}=true" >> $GITHUB_OUTPUT
+            else
+              echo "  → Should trigger: no (recent run exists)"
+              echo "should_trigger_${workflow_name}=false" >> $GITHUB_OUTPUT
+            fi
+          }
+
+          # Shift Monitor: threshold 35 min (هر ۳۰ دقیقه باید اجرا بشه)
+          check_workflow "monitor.yml" 35
+
+          # Telegram Bot: threshold 20 min (هر ۱۵ دقیقه باید اجرا بشه)
+          check_workflow "telegram-bot.yml" 20
 
       - name: 🚀 Trigger Shift Monitor
-        if: steps.check.outputs.should_trigger == 'true'
+        if: steps.check.outputs.should_trigger_monitor_yml == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Triggering Shift Monitor workflow..."
+          echo "🚀 Triggering Shift Monitor..."
           curl -s -X POST \
             -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -70,9 +79,24 @@ jobs:
             -d '{"ref":"main"}' \
             -w "HTTP Status: %{http_code}\n"
 
+      - name: 🤖 Trigger Telegram Bot
+        if: steps.check.outputs.should_trigger_telegram-bot_yml == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🤖 Triggering Telegram Bot..."
+          curl -s -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/telegram-bot.yml/dispatches" \
+            -d '{"ref":"main"}' \
+            -w "HTTP Status: %{http_code}\n"
+
       - name: 📊 Summary
         run: |
           echo "## External Trigger Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Last run:** ${{ steps.check.outputs.last_run }} minutes ago" >> $GITHUB_STEP_SUMMARY
-          echo "**Triggered monitor:** ${{ steps.check.outputs.should_trigger }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Workflow | Should Trigger |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-----------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Shift Monitor | ${{ steps.check.outputs.should_trigger_monitor_yml }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Telegram Bot | ${{ steps.check.outputs.should_trigger_telegram-bot_yml }} |" >> $GITHUB_STEP_SUMMARY
