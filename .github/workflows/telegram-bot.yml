@@ -1,12 +1,13 @@
 name: Telegram Bot
 
-# این workflow فقط با External Trigger (cron-job.org) یا دستی اجرا می‌شه
-# GitHub Schedule حذف شده تا رندوم اجرا نشه
+# این workflow خودکار بعد از تموم شدن Shift Monitor اجرا می‌شه
+# همچنین می‌تونی دستی هم اجرا کنی
 
 on:
-  workflow_dispatch:  # اجرای دستی از GitHub UI
-  repository_dispatch:  # اجرا با External Trigger
-    types: [run-bot]
+  workflow_run:
+    workflows: ["Shift Monitor"]
+    types: [completed]
+  workflow_dispatch:  # اجرای دستی
 
 permissions:
   contents: write
@@ -15,6 +16,8 @@ jobs:
   bot:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # فقط اگه Shift Monitor موفق بوده اجرا بشه (نه fail)
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: 📥 Checkout code
@@ -50,7 +53,6 @@ jobs:
             echo "No bot state changes."
           else
             git commit -m "chore: update bot state [skip ci]"
-            # Pull rebase in case other workflow pushed meanwhile
             git pull --rebase origin main || true
             git push || echo "Push failed, will retry next run"
           fi
