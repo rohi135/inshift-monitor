@@ -21,20 +21,22 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🕐 Check last runs
-        id: check
+      - name: 🕐 Check and trigger workflows
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
-          check_workflow() {
+          check_and_trigger() {
             local workflow_name="$1"
             local threshold_min="$2"
 
+            echo "=========================================="
             echo "Checking $workflow_name (threshold: ${threshold_min} min)..."
 
+            # Get last successful run time
             LAST_RUN=$(curl -s -H "Authorization: token $GH_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/${workflow_name}/runs?status=completed&per_page=10" \
+              "https://api.github.com/repos/$REPO/actions/workflows/${workflow_name}/runs?status=completed&per_page=10" \
               | python3 -c "
           import sys, json
           from datetime import datetime, timezone
@@ -44,7 +46,7 @@ jobs:
                   created = datetime.fromisoformat(run['created_at'].replace('Z', '+00:00'))
                   now = datetime.now(timezone.utc)
                   diff_min = (now - created).total_seconds() / 60
-                  print(f'{int(diff_min)}')
+                  print(int(diff_min))
                   sys.exit(0)
           print('')
           ")
@@ -52,51 +54,27 @@ jobs:
             echo "  Last success: ${LAST_RUN:-never} minutes ago"
 
             if [ -z "$LAST_RUN" ] || [ "$LAST_RUN" -gt "$threshold_min" ]; then
-              echo "  → Should trigger: yes"
-              echo "should_trigger_${workflow_name}=true" >> $GITHUB_OUTPUT
+              echo "  → Triggering $workflow_name..."
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+                -H "Authorization: token $GH_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/$REPO/actions/workflows/${workflow_name}/dispatches" \
+                -d '{"ref":"main"}')
+              echo "  → Trigger HTTP status: $HTTP_CODE"
             else
-              echo "  → Should trigger: no (recent run exists)"
-              echo "should_trigger_${workflow_name}=false" >> $GITHUB_OUTPUT
+              echo "  → Skip (recent run exists)"
             fi
+            echo ""
           }
 
           # Shift Monitor: threshold 35 min
-          check_workflow "monitor.yml" 35
+          check_and_trigger "monitor.yml" 35
 
           # Telegram Bot: threshold 20 min
-          check_workflow "telegram-bot.yml" 20
-
-      - name: 🚀 Trigger Shift Monitor
-        if: steps.check.outputs.should_trigger_monitor_yml == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "🚀 Triggering Shift Monitor..."
-          curl -s -X POST \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/monitor.yml/dispatches" \
-            -d '{"ref":"main"}' \
-            -w "HTTP Status: %{http_code}\n"
-
-      - name: 🤖 Trigger Telegram Bot
-        if: steps.check.outputs.should_trigger_telegram-bot_yml == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "🤖 Triggering Telegram Bot..."
-          curl -s -X POST \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/telegram-bot.yml/dispatches" \
-            -d '{"ref":"main"}' \
-            -w "HTTP Status: %{http_code}\n"
+          check_and_trigger "telegram-bot.yml" 20
 
       - name: 📊 Summary
+        if: always()
         run: |
-          echo "## External Trigger Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Workflow | Should Trigger |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-----------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Shift Monitor | ${{ steps.check.outputs.should_trigger_monitor_yml }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Telegram Bot | ${{ steps.check.outputs.should_trigger_telegram-bot_yml }} |" >> $GITHUB_STEP_SUMMARY
+          echo "## External Trigger Run" >> $GITHUB_STEP_SUMMARY
+          echo "Check logs for details." >> $GITHUB_STEP_SUMMARY
