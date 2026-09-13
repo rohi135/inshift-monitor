@@ -67,11 +67,11 @@ jobs:
             echo ""
           }
 
-          # Shift Monitor: threshold 35 min
-          check_and_trigger "monitor.yml" 35
+          # Shift Monitor: threshold 45 min (هر ۳۰ دقیقه باید اجرا بشه)
+          check_and_trigger "monitor.yml" 45
 
-          # Telegram Bot: threshold 20 min
-          check_and_trigger "telegram-bot.yml" 20
+          # Telegram Bot: threshold 45 min (هر ۳۰ دقیقه باید اجرا بشه)
+          check_and_trigger "telegram-bot.yml" 45
 
       - name: 📊 Summary
         if: always()
