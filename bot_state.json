@@ -1,4 +1,6 @@
 {
   "offset": 905089283,
-  "sent_warnings": {}
+  "sent_warnings": {
+    "warn_3": true
+  }
 }
