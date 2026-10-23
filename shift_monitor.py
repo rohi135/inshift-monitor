@@ -277,6 +277,18 @@ class JobFetcher:
 # کلاس فیلتر شیفت‌ها
 # ============================================================
 class JobFilter:
+    # mapping روزهای هفته به اعداد (0=دوشنبه ... 6=یکشنبه)
+    # فرمت مناسب با Python weekday()
+    WEEKDAY_NAMES = {
+        'monday': 0, 'mon': 0, 'دوشنبه': 0,
+        'tuesday': 1, 'tue': 1, 'سه‌شنبه': 1, 'سه شنبه': 1,
+        'wednesday': 2, 'wed': 2, 'چهارشنبه': 2,
+        'thursday': 3, 'thu': 3, 'پنج‌شنبه': 3, 'پنج شنبه': 3,
+        'friday': 4, 'fri': 4, 'جمعه': 4,
+        'saturday': 5, 'sat': 5, 'شنبه': 5,
+        'sunday': 6, 'sun': 6, 'یکشنبه': 6,
+    }
+
     def __init__(self, filters):
         self.job_titles = [t.lower() for t in filters.get('job_titles', [])]
         self.location = filters.get('location', '')
@@ -285,6 +297,35 @@ class JobFilter:
         self.end_hour = filters.get('end_hour', 17)
         self.end_minute = filters.get('end_minute', 0)
         self.exclude_full_capacity = filters.get('exclude_full_capacity', True)
+
+        # روزهای هفته مجاز
+        # فرمت: ["monday", "tuesday", "friday"] یا ["دوشنبه", "سه‌شنبه", "جمعه"]
+        # یا عدد: [0, 1, 4]  (0=دوشنبه)
+        # اگه خالی باشه = همه روزها
+        self.target_weekdays = self._parse_weekdays(filters.get('target_weekdays', []))
+
+        # چطور تاریخ شیفت رو بررسی کنیم:
+        # - 'shift_date' = تاریخ خود شیفت (توصیه شده)
+        # - 'today' = فقط شیفت‌های امروز رو شمار میار
+        # - 'tomorrow' = فقط شیفت‌های فردا
+        # - 'this_week' = همه شیفت‌های این هفته
+        self.date_filter_mode = filters.get('date_filter_mode', 'shift_date')
+
+    def _parse_weekdays(self, weekdays):
+        """تبدیل لیست روزهای هفته به اعداد 0-6"""
+        if not weekdays:
+            return []  # یعنی همه روزها مجازن
+
+        result = set()
+        for w in weekdays:
+            if isinstance(w, int):
+                if 0 <= w <= 6:
+                    result.add(w)
+            else:
+                w_str = str(w).lower().strip()
+                if w_str in self.WEEKDAY_NAMES:
+                    result.add(self.WEEKDAY_NAMES[w_str])
+        return sorted(list(result))
 
     def matches(self, job):
         # بررسی job_title
@@ -317,7 +358,47 @@ class JobFilter:
             if 'full_capacity' in tags:
                 return False
 
+        # بررسی روز هفته
+        if self.target_weekdays:
+            if not self._matches_weekday(job):
+                return False
+
         return True
+
+    def _matches_weekday(self, job):
+        """بررسی اینکه آیا شیفت در یکی از روزهای مدنظر هست یا نه."""
+        # گرفتن تاریخ شیفت
+        date_str = (job.get('date', {}) or {}).get('date', '')
+        if not date_str:
+            return True  # اگه تاریخ نداشت، نادیده بگیر
+
+        try:
+            # فرمت: "2026-09-13 00:00:00.000000"
+            shift_date = datetime.strptime(date_str[:10], '%Y-%m-%d')
+            # Python weekday(): 0=Monday, 6=Sunday
+            shift_weekday = shift_date.weekday()
+
+            if self.date_filter_mode == 'today':
+                # فقط شیفت‌های امروز رو شمار بگیر
+                today = datetime.now(TEHRAN_TZ).date()
+                if shift_date.date() != today:
+                    return False
+                # و روز هفته هم باید مدنظر باشه
+                return shift_weekday in self.target_weekdays
+
+            elif self.date_filter_mode == 'shift_date':
+                # روز هفته خود شیفت رو چک کن
+                return shift_weekday in self.target_weekdays
+
+            elif self.date_filter_mode == 'this_week':
+                # هر شیفت این هفته که روز مدنظر باشه
+                return shift_weekday in self.target_weekdays
+
+            else:
+                return True
+        except Exception as e:
+            logger.warning(f"خطا در parse تاریخ شیفت: {e}")
+            return True  # اگه نتونست parse کنه، نادیده بگیر
 
 
 # ============================================================

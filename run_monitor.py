@@ -52,6 +52,15 @@ from shift_monitor import (
 # خوندن تنظیمات از Environment Variables
 # ============================================================
 def get_config():
+    # پارس کردن target_weekdays از env var
+    # فرمت‌های قابل قبول:
+    #   "monday,tuesday,friday"
+    #   "دوشنبه,سه‌شنبه,جمعه"
+    #   "0,1,4"
+    #   "" (خالی = همه روزها)
+    weekdays_str = os.getenv('FILTER_TARGET_WEEKDAYS', '')
+    target_weekdays = [w.strip() for w in weekdays_str.split(',') if w.strip()] if weekdays_str else []
+
     return {
         'telegram_bot_token': os.getenv('TELEGRAM_BOT_TOKEN', ''),
         'telegram_chat_id': os.getenv('TELEGRAM_CHAT_ID', ''),
@@ -66,6 +75,8 @@ def get_config():
             'end_hour': int(os.getenv('FILTER_END_HOUR', '17')),
             'end_minute': int(os.getenv('FILTER_END_MINUTE', '0')),
             'exclude_full_capacity': os.getenv('EXCLUDE_FULL_CAPACITY', 'true').lower() == 'true',
+            'target_weekdays': target_weekdays,
+            'date_filter_mode': os.getenv('FILTER_DATE_MODE', 'shift_date'),
         },
         'api_url': os.getenv('API_URL', 'https://staffing-api.example.com/api/seeker/v1/jobs?page=1'),
         'request_timeout_seconds': 15,

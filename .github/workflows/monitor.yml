@@ -58,6 +58,8 @@ jobs:
           FILTER_END_HOUR: ${{ vars.FILTER_END_HOUR || '17' }}
           FILTER_END_MINUTE: ${{ vars.FILTER_END_MINUTE || '0' }}
           EXCLUDE_FULL_CAPACITY: ${{ vars.EXCLUDE_FULL_CAPACITY || 'true' }}
+          FILTER_TARGET_WEEKDAYS: ${{ vars.FILTER_TARGET_WEEKDAYS || '' }}
+          FILTER_DATE_MODE: ${{ vars.FILTER_DATE_MODE || 'shift_date' }}
         run: |
           python run_monitor.py
 
