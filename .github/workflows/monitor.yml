@@ -60,6 +60,7 @@ jobs:
           EXCLUDE_FULL_CAPACITY: ${{ vars.EXCLUDE_FULL_CAPACITY || 'true' }}
           FILTER_TARGET_WEEKDAYS: ${{ vars.FILTER_TARGET_WEEKDAYS || '' }}
           FILTER_DATE_MODE: ${{ vars.FILTER_DATE_MODE || 'shift_date' }}
+          AUTO_APPLY: ${{ vars.AUTO_APPLY || 'false' }}
         run: |
           python run_monitor.py
 

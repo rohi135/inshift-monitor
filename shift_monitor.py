@@ -157,12 +157,18 @@ class StateManager:
     @staticmethod
     def load():
         if not STATE_PATH.exists():
-            return {"notified_shifts": [], "last_check": None}
+            return {"notified_shifts": [], "applied_shifts": [], "last_check": None}
         try:
             with open(STATE_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                state = json.load(f)
+                # اطمینان از وجود همه کلیدها
+                if 'notified_shifts' not in state:
+                    state['notified_shifts'] = []
+                if 'applied_shifts' not in state:
+                    state['applied_shifts'] = []
+                return state
         except Exception:
-            return {"notified_shifts": [], "last_check": None}
+            return {"notified_shifts": [], "applied_shifts": [], "last_check": None}
 
     @staticmethod
     def save(state):
@@ -180,6 +186,20 @@ class StateManager:
         state['notified_shifts'].append(str(shift_id))
         # نگه‌داشتن فقط ۱۰۰ آی‌دی آخر
         state['notified_shifts'] = state['notified_shifts'][-100:]
+
+    @staticmethod
+    def is_applied(state, hash_id):
+        """آیا قبلاً برای این شیفت درخواست ثبت شده؟"""
+        return str(hash_id) in state.get('applied_shifts', [])
+
+    @staticmethod
+    def mark_applied(state, hash_id):
+        """ثبت اینکه برای این شیفت درخواست دادیم."""
+        if 'applied_shifts' not in state:
+            state['applied_shifts'] = []
+        state['applied_shifts'].append(str(hash_id))
+        # نگه‌داشتن فقط ۱۰۰ آی‌دی آخر
+        state['applied_shifts'] = state['applied_shifts'][-100:]
 
 
 # ============================================================
@@ -271,6 +291,117 @@ class JobFetcher:
                 return None, 'UNKNOWN_ERROR'
 
         return None, 'MAX_RETRIES_EXCEEDED'
+
+
+# ============================================================
+# کلاس ثبت درخواست شیفت (Auto-Apply)
+# ============================================================
+class JobApplicator:
+    """ثبت درخواست شیفت با POST به API.
+
+    API endpoint: POST /api/seeker/v1/jobs
+    Body: {"job_post_id": "<hash_id>"}
+    Response success: {"message":"درخواست شیفت با موفقیت انجام شد."}
+    """
+
+    APPLY_URL_PATH = '/api/seeker/v1/jobs'  # بدون domain - از API_URL گرفته می‌شه
+
+    def __init__(self, config=None):
+        self.config = config or {}
+        # ساختن URL از API_URL اصلی (به‌جای hardcode کردن)
+        api_url = self.config.get('api_url') or os.getenv(
+            'API_URL',
+            'https://staffing-api.example.com/api/seeker/v1/jobs?page=1'
+        )
+        # استخراج base URL (بدون query string و path آخر)
+        # از 'https://staffing.digikala.com/api/seeker/v1/jobs?page=1'
+        # به 'https://staffing.digikala.com/api/seeker/v1/jobs'
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(api_url)
+        self.base_url = f"{parsed.scheme}://{parsed.netloc}"
+        self.apply_url = self.base_url + self.APPLY_URL_PATH
+        self.timeout = self.config.get('request_timeout_seconds', 15)
+
+    def apply(self, token, hash_id, proxy_url=None):
+        """ثبت درخواست برای یه شیفت.
+
+        Args:
+            token: توکن JWT
+            hash_id: hash_id شیفت (مثل "55511845536")
+            proxy_url: آدرس پروکسی (اختیاری)
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        origin = os.getenv('PORTAL_ORIGIN', 'https://shift-portal.example.com')
+
+        headers = {
+            'Authorization': token,
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Content-Type': 'application/json',
+            'Origin': origin,
+            'Referer': origin + '/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-site',
+        }
+
+        body = {"job_post_id": str(hash_id)}
+        proxies = {'http': proxy_url, 'https': proxy_url} if proxy_url else None
+
+        try:
+            logger.info(f"📝 ثبت درخواست برای شیفت {hash_id}...")
+            response = requests.post(
+                self.apply_url,
+                headers=headers,
+                json=body,
+                proxies=proxies,
+                timeout=self.timeout,
+                verify=True
+            )
+
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    msg = data.get('message', 'موفق')
+                    logger.info(f"✓ ثبت درخواست موفق: {msg}")
+                    return True, msg
+                except Exception:
+                    logger.info("✓ ثبت درخواست موفق (بدون message)")
+                    return True, 'موفق'
+
+            if response.status_code == 401:
+                logger.error("✗ توکن منقضی شده")
+                return False, 'TOKEN_EXPIRED'
+
+            if response.status_code in (403, 451):
+                logger.error(f"✗ IP بلاک شده: {response.status_code}")
+                return False, 'IP_BLOCKED'
+
+            if response.status_code == 422 or response.status_code == 400:
+                # احتمالاً duplicate_application یا خطای validation
+                try:
+                    data = response.json()
+                    msg = data.get('message', data.get('error', 'خطای validation'))
+                    logger.warning(f"✗ خطای اعتبارسنجی: {msg}")
+                    return False, f'VALIDATION_ERROR: {msg}'
+                except Exception:
+                    return False, f'HTTP_{response.status_code}'
+
+            logger.error(f"✗ خطای HTTP {response.status_code}: {response.text[:200]}")
+            return False, f'HTTP_{response.status_code}'
+
+        except requests.exceptions.ProxyError:
+            logger.error("✗ خطای پروکسی")
+            return False, 'PROXY_ERROR'
+        except requests.exceptions.Timeout:
+            logger.error("✗ تایم‌اوت")
+            return False, 'TIMEOUT'
+        except Exception as e:
+            logger.error(f"✗ خطای غیرمنتظره: {e}")
+            return False, f'UNKNOWN_ERROR: {e}'
 
 
 # ============================================================
@@ -475,6 +606,52 @@ class Notifier:
         # نوتیف گوشی (فقط روی Termux کار می‌کنه)
         notif_content = f"{title} | {location} | {start}-{end}"
         self.send_termux_notification("🎯 شیفت پیدا شد!", notif_content)
+
+    def notify_shift_applied(self, job, message='موفق'):
+        """پیام موفقیت در ثبت درخواست شیفت."""
+        title = job.get('job_title', '')
+        location = job.get('location', '')
+        ts = job.get('time_scope', {})
+        start = f"{ts.get('start_hour', 0):02d}:{ts.get('start_minute', 0):02d}"
+        end = f"{ts.get('end_hour', 0):02d}:{ts.get('end_minute', 0):02d}"
+        price = job.get('price', 0)
+        price_t = f"{price:,}" if price else "0"
+        date = (job.get('date', {}) or {}).get('date', '')[:10]
+        hash_id = job.get('hash_id', '')
+
+        tg_text = (
+            "✅ <b>شیفت با موفقیت رزرو شد!</b>\n\n"
+            f"💼 <b>عنوان:</b> {title}\n"
+            f"📍 <b>شعبه:</b> {location}\n"
+            f"📅 <b>تاریخ:</b> {date}\n"
+            f"🕐 <b>ساعت:</b> {start} تا {end}\n"
+            f"💰 <b>دستمزد:</b> {price_t} تومان\n"
+            f"🆔 <b>کد:</b> <code>{hash_id}</code>\n\n"
+            f"📩 <i>{message}</i>"
+        )
+        self.send_telegram(tg_text)
+
+        # نوتیف گوشی
+        notif_content = f"رزرو شد: {title} | {location} | {date} {start}"
+        self.send_termux_notification("✅ شیفت رزرو شد!", notif_content)
+
+    def notify_apply_failed(self, job, error_msg):
+        """پیام خطا در ثبت درخواست شیفت."""
+        title = job.get('job_title', '')
+        location = job.get('location', '')
+        hash_id = job.get('hash_id', '')
+        date = (job.get('date', {}) or {}).get('date', '')[:10]
+
+        tg_text = (
+            "⚠️ <b>خطا در ثبت درخواست شیفت</b>\n\n"
+            f"💼 <b>عنوان:</b> {title}\n"
+            f"📍 <b>شعبه:</b> {location}\n"
+            f"📅 <b>تاریخ:</b> {date}\n"
+            f"🆔 <b>کد:</b> <code>{hash_id}</code>\n\n"
+            f"❌ <b>خطا:</b> <code>{error_msg}</code>\n\n"
+            f"🔗 <a href=\"https://shift-portal.example.com/jobs\">باز کردن سایت و ثبت دستی</a>"
+        )
+        self.send_telegram(tg_text)
 
     def notify_error(self, error_type, details=""):
         messages = {

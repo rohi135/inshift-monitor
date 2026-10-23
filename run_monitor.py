@@ -190,22 +190,67 @@ async def main():
     job_filter = JobFilter(config['filters'])
     state = StateManager.load()
 
+    # آیا auto-apply فعال هست؟
+    auto_apply = os.getenv('AUTO_APPLY', 'false').lower() == 'true'
+    if auto_apply:
+        logger.info("🤖 Auto-apply فعال هست. شیفت‌های match شده خودکار رزرو می‌شن.")
+    else:
+        logger.info("📢 Auto-Apply غیرفعال. فقط نوتیف تلگرام ارسال می‌شه.")
+
     matched_shifts = []
     new_shifts = []
 
     for job in data.get('data', []):
         if job_filter.matches(job):
             matched_shifts.append(job)
+            # فقط شیفت‌هایی که قبلاً نوتیف ندادیم
             if not StateManager.is_notified(state, job.get('id')):
                 new_shifts.append(job)
 
     logger.info(f"📊 کل: {len(data.get('data', []))} | Match: {len(matched_shifts)} | جدید: {len(new_shifts)}")
 
-    # ارسال نوتیف برای شیفت‌های جدید
+    # پردازش شیفت‌های جدید
+    applicator = None
+    if auto_apply:
+        from shift_monitor import JobApplicator
+        applicator = JobApplicator(config)
+
     for job in new_shifts:
-        notifier.notify_shift_found(job)
-        StateManager.mark_notified(state, job.get('id'))
-        await asyncio.sleep(1)  # جلوگیری از rate limit
+        hash_id = job.get('hash_id', '')
+
+        if auto_apply and hash_id:
+            # بررسی اینکه قبلاً رزرو نکردیم
+            if StateManager.is_applied(state, hash_id):
+                logger.info(f"⏭️ شیفت {hash_id} قبلاً رزرو شده، skip.")
+                StateManager.mark_notified(state, job.get('id'))
+                continue
+
+            # تلاش برای ثبت درخواست
+            success, msg = applicator.apply(token, hash_id, proxy_url=proxy.url)
+
+            if success:
+                # ثبت موفق
+                StateManager.mark_applied(state, hash_id)
+                StateManager.mark_notified(state, job.get('id'))
+                notifier.notify_shift_applied(job, msg)
+                logger.info(f"✓ رزرو شد: {hash_id}")
+            else:
+                # ثبت ناموفق
+                StateManager.mark_notified(state, job.get('id'))
+                notifier.notify_apply_failed(job, msg)
+                logger.warning(f"✗ رزرو ناموفق: {hash_id} - {msg}")
+
+                # اگه توکن منقضی شده، بقیه رو هم نزن
+                if 'TOKEN_EXPIRED' in msg:
+                    notifier.notify_error('TOKEN_EXPIRED')
+                    break
+
+            await asyncio.sleep(2)  # جلوگیری از rate limit
+        else:
+            # فقط نوتیف بده (بدون رزرو)
+            notifier.notify_shift_found(job)
+            StateManager.mark_notified(state, job.get('id'))
+            await asyncio.sleep(1)
 
     # آپدیت state
     state['last_check'] = datetime.now(TEHRAN_TZ).isoformat()
