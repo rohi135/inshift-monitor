@@ -225,8 +225,39 @@ async def main():
                 StateManager.mark_notified(state, job.get('id'))
                 continue
 
-            # تلاش برای ثبت درخواست
-            success, msg = applicator.apply(token, hash_id, proxy_url=proxy.url)
+            # تلاش برای ثبت درخواست با چند پروکسی مختلف
+            # اگه اولی timeout خورد، با بعدی امتحان می‌کنیم
+            success = False
+            msg = ''
+            max_apply_attempts = 5  # حداکثر ۵ پروکسی برای apply
+
+            # اول پروکسی فعلی رو امتحان کن
+            apply_proxies = [proxy]
+            # بعد چند پروکسی دیگه از pool
+            for p in pool.proxies[:max_apply_attempts]:
+                if p.url != proxy.url:
+                    apply_proxies.append(p)
+                    if len(apply_proxies) >= max_apply_attempts:
+                        break
+
+            for i, try_proxy in enumerate(apply_proxies):
+                logger.info(f"📝 تلاش {i+1}/{len(apply_proxies)} برای رزرو شیفت {hash_id} با پروکسی {try_proxy.url}")
+                success, msg = applicator.apply(token, hash_id, proxy_url=try_proxy.url)
+
+                if success:
+                    break  # موفق بود، بقیه پروکسی‌ها رو امتحان نکن
+
+                # اگه توکن منقضی شده، بیخیال شو
+                if 'TOKEN_EXPIRED' in msg:
+                    break
+
+                # اگه خطای validation بود (مثل duplicate)، بیخیال شو
+                if 'VALIDATION_ERROR' in msg or 'duplicate' in msg.lower():
+                    break
+
+                # در غیر این صورت (timeout, proxy error) با پروکسی بعدی امتحان کن
+                logger.warning(f"✗ تلاش {i+1} ناموفق: {msg}")
+                await asyncio.sleep(1)
 
             if success:
                 # ثبت موفق
@@ -235,10 +266,10 @@ async def main():
                 notifier.notify_shift_applied(job, msg)
                 logger.info(f"✓ رزرو شد: {hash_id}")
             else:
-                # ثبت ناموفق
+                # ثبت ناموفق بعد از همه تلاش‌ها
                 StateManager.mark_notified(state, job.get('id'))
                 notifier.notify_apply_failed(job, msg)
-                logger.warning(f"✗ رزرو ناموفق: {hash_id} - {msg}")
+                logger.warning(f"✗ رزرو ناموفق بعد از {len(apply_proxies)} تلاش: {hash_id} - {msg}")
 
                 # اگه توکن منقضی شده، بقیه رو هم نزن
                 if 'TOKEN_EXPIRED' in msg:

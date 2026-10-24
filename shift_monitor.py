@@ -314,13 +314,12 @@ class JobApplicator:
             'https://staffing-api.example.com/api/seeker/v1/jobs?page=1'
         )
         # استخراج base URL (بدون query string و path آخر)
-        # از 'https://staffing.digikala.com/api/seeker/v1/jobs?page=1'
-        # به 'https://staffing.digikala.com/api/seeker/v1/jobs'
         from urllib.parse import urlparse, urlunparse
         parsed = urlparse(api_url)
         self.base_url = f"{parsed.scheme}://{parsed.netloc}"
         self.apply_url = self.base_url + self.APPLY_URL_PATH
-        self.timeout = self.config.get('request_timeout_seconds', 15)
+        # timeout کوتاه‌تر برای apply (تا سریع‌تر با پروکسی بعدی retry کنیم)
+        self.timeout = int(os.getenv('APPLY_TIMEOUT_SECONDS', '10'))
 
     def apply(self, token, hash_id, proxy_url=None):
         """ثبت درخواست برای یه شیفت.
