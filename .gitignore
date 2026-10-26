@@ -1,6 +1,5 @@
 # فایل‌های generated
 token.txt
-state.json
 monitor.log
 cron.log
 token_bot.log
@@ -13,6 +12,9 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# state.json و bot_state.json باید commit بشن (برای حفظ state بین اجراها)
+# نکته: این فایل‌ها حساس نیستن (فقط hash_id و تاریخ‌های applied)
 
 # IDE
 .vscode/
