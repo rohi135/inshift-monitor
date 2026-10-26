@@ -432,12 +432,19 @@ class JobApplicator:
                 return False, 'IP_BLOCKED'
 
             if response.status_code == 422 or response.status_code == 400:
-                # احتمالاً duplicate_application یا خطای validation
+                # احتمالاً duplicate_application یا تداخل زمانی یا خطای validation
                 try:
                     data = response.json()
                     msg = data.get('message', data.get('error', 'خطای validation'))
-                    logger.warning(f"✗ خطای اعتبارسنجی: {msg}")
-                    return False, f'VALIDATION_ERROR: {msg}'
+                    # ★ اگه تداخل زمانی یا duplicate بود، یعنی اون روز شیفت داریم
+                    # این هم به‌عنوان CONFLICT ثبت می‌شه (تا اسکریپت دونوعه اون روز رزرو نکنه)
+                    msg_lower = str(msg).lower()
+                    if 'duplicate' in msg_lower or 'تداخل' in str(msg) or 'conflict' in msg_lower:
+                        logger.warning(f"✗ تداخل زمانی/duplicate: {msg}")
+                        return False, f'CONFLICT: {msg}'
+                    else:
+                        logger.warning(f"✗ خطای اعتبارسنجی: {msg}")
+                        return False, f'VALIDATION_ERROR: {msg}'
                 except Exception:
                     return False, f'HTTP_{response.status_code}'
 
@@ -631,8 +638,9 @@ class Notifier:
             logger.debug(f"Termux notification در دسترس نیست: {e}")
 
     def notify_shift_found(self, job):
-        title = job.get('job_title', '')
-        location = job.get('location', '')
+        import html as html_module
+        title = html_module.escape(str(job.get('job_title', '')))
+        location = html_module.escape(str(job.get('location', '')))
         ts = job.get('time_scope', {})
         start = f"{ts.get('start_hour', 0):02d}:{ts.get('start_minute', 0):02d}"
         end = f"{ts.get('end_hour', 0):02d}:{ts.get('end_minute', 0):02d}"
@@ -660,8 +668,9 @@ class Notifier:
 
     def notify_shift_applied(self, job, message='موفق'):
         """پیام موفقیت در ثبت درخواست شیفت."""
-        title = job.get('job_title', '')
-        location = job.get('location', '')
+        import html as html_module
+        title = html_module.escape(str(job.get('job_title', '')))
+        location = html_module.escape(str(job.get('location', '')))
         ts = job.get('time_scope', {})
         start = f"{ts.get('start_hour', 0):02d}:{ts.get('start_minute', 0):02d}"
         end = f"{ts.get('end_hour', 0):02d}:{ts.get('end_minute', 0):02d}"
@@ -669,6 +678,7 @@ class Notifier:
         price_t = f"{price:,}" if price else "0"
         date = (job.get('date', {}) or {}).get('date', '')[:10]
         hash_id = job.get('hash_id', '')
+        safe_message = html_module.escape(str(message))
 
         tg_text = (
             "✅ <b>شیفت با موفقیت رزرو شد!</b>\n\n"
@@ -678,7 +688,7 @@ class Notifier:
             f"🕐 <b>ساعت:</b> {start} تا {end}\n"
             f"💰 <b>دستمزد:</b> {price_t} تومان\n"
             f"🆔 <b>کد:</b> <code>{hash_id}</code>\n\n"
-            f"📩 <i>{message}</i>"
+            f"📩 <i>{safe_message}</i>"
         )
         self.send_telegram(tg_text)
 
@@ -693,13 +703,20 @@ class Notifier:
         hash_id = job.get('hash_id', '')
         date = (job.get('date', {}) or {}).get('date', '')[:10]
 
+        # ★ HTML escape کردن title و location و error_msg
+        # (سرور ممکنه کاراکترهای < > رو تو پیام بفرسته)
+        import html as html_module
+        safe_title = html_module.escape(str(title))
+        safe_location = html_module.escape(str(location))
+        safe_error = html_module.escape(str(error_msg))
+
         tg_text = (
             "⚠️ <b>خطا در ثبت درخواست شیفت</b>\n\n"
-            f"💼 <b>عنوان:</b> {title}\n"
-            f"📍 <b>شعبه:</b> {location}\n"
+            f"💼 <b>عنوان:</b> {safe_title}\n"
+            f"📍 <b>شعبه:</b> {safe_location}\n"
             f"📅 <b>تاریخ:</b> {date}\n"
             f"🆔 <b>کد:</b> <code>{hash_id}</code>\n\n"
-            f"❌ <b>خطا:</b> <code>{error_msg}</code>\n\n"
+            f"❌ <b>خطا:</b> <code>{safe_error}</code>\n\n"
             f"🔗 <a href=\"https://shift-portal.example.com/jobs\">باز کردن سایت و ثبت دستی</a>"
         )
         self.send_telegram(tg_text)

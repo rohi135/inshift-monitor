@@ -259,16 +259,17 @@ async def main():
                 if 'TOKEN_EXPIRED' in msg:
                     break
 
-                if 'VALIDATION_ERROR' in msg or 'duplicate' in msg.lower():
-                    # اگه duplicate بود، یعنی قبلاً رزرو کردیم ولی state.json نبود
-                    # این رو هم به‌عنوان applied ثبت می‌کنیم
-                    if 'duplicate' in msg.lower():
-                        StateManager.mark_applied(state, hash_id)
-                        if shift_date_str:
-                            StateManager.mark_date_applied(state, shift_date_str)
+                # اگه خطای validation بود (duplicate یا تداخل زمانی)،
+                # یعنی برای این روز قبلاً شیفت رزرو شده. retry نکن.
+                if 'VALIDATION_ERROR' in msg or 'CONFLICT' in msg or 'duplicate' in msg.lower():
+                    # ★ ثبت به‌عنوان applied (تا دوباره تلاش نکنه)
+                    StateManager.mark_applied(state, hash_id)
+                    if shift_date_str:
+                        StateManager.mark_date_applied(state, shift_date_str)
+                        logger.info(f"🔒 تاریخ {shift_date_str} به‌عنوان applied ثبت شد (validation/conflict)")
                     break
 
-                logger.warning(f"✗ تلاش {i+1} ناموفق: {msg}")
+                logger.warning(f"✗ تلاش {i+1} ناموفف: {msg}")
                 await asyncio.sleep(1)
 
             if success:
@@ -284,7 +285,9 @@ async def main():
             else:
                 # ثبت ناموفق
                 StateManager.mark_notified(state, job.get('id'))
-                notifier.notify_apply_failed(job, msg)
+                # ★ اگه خطای validation بود، پیام تلگرام رو امن کن (escape HTML)
+                safe_msg = msg.replace('<', '&lt;').replace('>', '&gt;')
+                notifier.notify_apply_failed(job, safe_msg)
                 logger.warning(f"✗ رزرو ناموفق بعد از {len(apply_proxies)} تلاش: {hash_id} - {msg}")
 
                 if 'TOKEN_EXPIRED' in msg:
