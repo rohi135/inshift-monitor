@@ -218,22 +218,57 @@ async def main():
         # پاک کردن تاریخ‌های گذشته (تمیزکاری)
         StateManager.cleanup_old_dates(state)
 
+        # ★ فیلتر اولیه: قبل از هر تلاشی، شیفت‌هایی که تاریخشون applied هست رو حذف کن
+        # اینطوری هیچ ریکوئستی به سرور برای اون روز نمی‌ره
+        original_count = len(new_shifts)
+        filtered_shifts = []
+        skipped_dates = set()
+
+        for job in new_shifts:
+            shift_date_str = (job.get('date', {}) or {}).get('date', '')[:10]
+            hash_id = job.get('hash_id', '')
+
+            # اگه شیفت قبلاً applied شده، skip
+            if hash_id and StateManager.is_applied(state, hash_id):
+                logger.info(f"⏭️ شیفت {hash_id} قبلاً رزرو شده، skip.")
+                skipped_dates.add(shift_date_str)
+                continue
+
+            # اگه تاریخ شیفت قبلاً applied شده، skip
+            if shift_date_str and StateManager.is_date_applied(state, shift_date_str):
+                skipped_dates.add(shift_date_str)
+                continue
+
+            filtered_shifts.append(job)
+
+        # نشون بده چند شیفت skip شدن
+        skipped_count = original_count - len(filtered_shifts)
+        if skipped_count > 0:
+            logger.info(f"🔒 {skipped_count} شیفت skip شد (تاریخ‌های applied: {', '.join(sorted(skipped_dates))})")
+
+        new_shifts = filtered_shifts
+
+    # اگه بعد از فیلتر هیچ شیفت جدیدی نموند، تموم کن
+    if not new_shifts:
+        logger.info("✓ هیچ شیفت جدیدی برای پردازش نیست.")
+        state['last_check'] = datetime.now(TEHRAN_TZ).isoformat()
+        StateManager.save(state)
+        logger.info("✓ بررسی کامل شد.")
+        return True
+
     for job in new_shifts:
         hash_id = job.get('hash_id', '')
         # استخراج تاریخ شیفت (به فرمت YYYY-MM-DD)
         shift_date_str = (job.get('date', {}) or {}).get('date', '')[:10]
 
         if auto_apply and hash_id:
-            # بررسی اینکه قبلاً رزرو نکردیم
+            # (چک‌های is_applied و is_date_applied قبلاً تو فیلتر اولیه انجام شدن)
+            # ولی برای اطمینان دوباره چک می‌کنیم
             if StateManager.is_applied(state, hash_id):
-                logger.info(f"⏭️ شیفت {hash_id} قبلاً رزرو شده، skip.")
                 StateManager.mark_notified(state, job.get('id'))
                 continue
 
-            # ★ بررسی اینکه برای این تاریخ قبلاً شیفت رزرو کردیم؟
-            # (اگه بله، برای این روز دیگه شیفت دیگه‌ای رزرو نکن)
             if shift_date_str and StateManager.is_date_applied(state, shift_date_str):
-                logger.info(f"⏭️ برای تاریخ {shift_date_str} قبلاً شیفت رزرو شده، skip شیفت {hash_id}")
                 StateManager.mark_notified(state, job.get('id'))
                 continue
 
