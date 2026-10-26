@@ -215,8 +215,13 @@ async def main():
         from shift_monitor import JobApplicator
         applicator = JobApplicator(config)
 
+        # پاک کردن تاریخ‌های گذشته (تمیزکاری)
+        StateManager.cleanup_old_dates(state)
+
     for job in new_shifts:
         hash_id = job.get('hash_id', '')
+        # استخراج تاریخ شیفت (به فرمت YYYY-MM-DD)
+        shift_date_str = (job.get('date', {}) or {}).get('date', '')[:10]
 
         if auto_apply and hash_id:
             # بررسی اینکه قبلاً رزرو نکردیم
@@ -225,15 +230,19 @@ async def main():
                 StateManager.mark_notified(state, job.get('id'))
                 continue
 
+            # ★ بررسی اینکه برای این تاریخ قبلاً شیفت رزرو کردیم؟
+            # (اگه بله، برای این روز دیگه شیفت دیگه‌ای رزرو نکن)
+            if shift_date_str and StateManager.is_date_applied(state, shift_date_str):
+                logger.info(f"⏭️ برای تاریخ {shift_date_str} قبلاً شیفت رزرو شده، skip شیفت {hash_id}")
+                StateManager.mark_notified(state, job.get('id'))
+                continue
+
             # تلاش برای ثبت درخواست با چند پروکسی مختلف
-            # اگه اولی timeout خورد، با بعدی امتحان می‌کنیم
             success = False
             msg = ''
-            max_apply_attempts = 5  # حداکثر ۵ پروکسی برای apply
+            max_apply_attempts = 5
 
-            # اول پروکسی فعلی رو امتحان کن
             apply_proxies = [proxy]
-            # بعد چند پروکسی دیگه از pool
             for p in pool.proxies[:max_apply_attempts]:
                 if p.url != proxy.url:
                     apply_proxies.append(p)
@@ -241,42 +250,48 @@ async def main():
                         break
 
             for i, try_proxy in enumerate(apply_proxies):
-                logger.info(f"📝 تلاش {i+1}/{len(apply_proxies)} برای رزرو شیفت {hash_id} با پروکسی {try_proxy.url}")
+                logger.info(f"📝 تلاش {i+1}/{len(apply_proxies)} برای رزرو شیفت {hash_id} (تاریخ {shift_date_str}) با پروکسی {try_proxy.url}")
                 success, msg = applicator.apply(token, hash_id, proxy_url=try_proxy.url)
 
                 if success:
-                    break  # موفق بود، بقیه پروکسی‌ها رو امتحان نکن
+                    break
 
-                # اگه توکن منقضی شده، بیخیال شو
                 if 'TOKEN_EXPIRED' in msg:
                     break
 
-                # اگه خطای validation بود (مثل duplicate)، بیخیال شو
                 if 'VALIDATION_ERROR' in msg or 'duplicate' in msg.lower():
+                    # اگه duplicate بود، یعنی قبلاً رزرو کردیم ولی state.json نبود
+                    # این رو هم به‌عنوان applied ثبت می‌کنیم
+                    if 'duplicate' in msg.lower():
+                        StateManager.mark_applied(state, hash_id)
+                        if shift_date_str:
+                            StateManager.mark_date_applied(state, shift_date_str)
                     break
 
-                # در غیر این صورت (timeout, proxy error) با پروکسی بعدی امتحان کن
                 logger.warning(f"✗ تلاش {i+1} ناموفق: {msg}")
                 await asyncio.sleep(1)
 
             if success:
                 # ثبت موفق
                 StateManager.mark_applied(state, hash_id)
+                # ★ ثبت تاریخ به‌عنوان applied (تا برای این روز دیگه رزرو نکنیم)
+                if shift_date_str:
+                    StateManager.mark_date_applied(state, shift_date_str)
                 StateManager.mark_notified(state, job.get('id'))
                 notifier.notify_shift_applied(job, msg)
-                logger.info(f"✓ رزرو شد: {hash_id}")
+                logger.info(f"✓ رزرو شد: {hash_id} (تاریخ {shift_date_str})")
+                logger.info(f"🔒 برای تاریخ {shift_date_str} دیگر شیفت دیگه‌ای رزرو نخواهد شد")
             else:
-                # ثبت ناموفق بعد از همه تلاش‌ها
+                # ثبت ناموفق
                 StateManager.mark_notified(state, job.get('id'))
                 notifier.notify_apply_failed(job, msg)
                 logger.warning(f"✗ رزرو ناموفق بعد از {len(apply_proxies)} تلاش: {hash_id} - {msg}")
 
-                # اگه توکن منقضی شده، بقیه رو هم نزن
                 if 'TOKEN_EXPIRED' in msg:
                     notifier.notify_error('TOKEN_EXPIRED')
                     break
 
-            await asyncio.sleep(2)  # جلوگیری از rate limit
+            await asyncio.sleep(2)
         else:
             # فقط نوتیف بده (بدون رزرو)
             notifier.notify_shift_found(job)

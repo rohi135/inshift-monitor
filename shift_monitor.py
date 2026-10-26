@@ -156,8 +156,14 @@ class TokenManager:
 class StateManager:
     @staticmethod
     def load():
+        default = {
+            "notified_shifts": [],
+            "applied_shifts": [],
+            "applied_dates": [],  # تاریخ‌هایی که برایشون شیفت رزرو کردیم
+            "last_check": None
+        }
         if not STATE_PATH.exists():
-            return {"notified_shifts": [], "applied_shifts": [], "last_check": None}
+            return default
         try:
             with open(STATE_PATH, 'r', encoding='utf-8') as f:
                 state = json.load(f)
@@ -166,9 +172,11 @@ class StateManager:
                     state['notified_shifts'] = []
                 if 'applied_shifts' not in state:
                     state['applied_shifts'] = []
+                if 'applied_dates' not in state:
+                    state['applied_dates'] = []
                 return state
         except Exception:
-            return {"notified_shifts": [], "applied_shifts": [], "last_check": None}
+            return default
 
     @staticmethod
     def save(state):
@@ -200,6 +208,50 @@ class StateManager:
         state['applied_shifts'].append(str(hash_id))
         # نگه‌داشتن فقط ۱۰۰ آی‌دی آخر
         state['applied_shifts'] = state['applied_shifts'][-100:]
+
+    @staticmethod
+    def is_date_applied(state, date_str):
+        """آیا برای این تاریخ قبلاً شیفت رزرو کردیم؟
+
+        Args:
+            date_str: تاریخ به فرمت 'YYYY-MM-DD'
+
+        Returns:
+            bool: True اگه برای این تاریخ قبلاً رزرو کردیم
+        """
+        return str(date_str) in state.get('applied_dates', [])
+
+    @staticmethod
+    def mark_date_applied(state, date_str):
+        """ثبت اینکه برای این تاریخ شیفت رزرو کردیم."""
+        if 'applied_dates' not in state:
+            state['applied_dates'] = []
+        if str(date_str) not in state['applied_dates']:
+            state['applied_dates'].append(str(date_str))
+            # نگه‌داشتن فقط ۳۰ تاریخ آخر (یک ماه)
+            state['applied_dates'] = state['applied_dates'][-30:]
+
+    @staticmethod
+    def cleanup_old_dates(state):
+        """پاک کردن تاریخ‌های گذشته (قدیمی‌تر از امروز).
+
+        این کار کمک می‌کنه state.json کوچیک بمونه و
+        تاریخ‌های قدیمی حذف بشن.
+        """
+        from datetime import datetime, timezone, timedelta
+        TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
+        today = datetime.now(TEHRAN_TZ).date()
+        applied_dates = state.get('applied_dates', [])
+        # فقط تاریخ‌های امروز یا آینده رو نگه‌دار
+        kept = []
+        for d in applied_dates:
+            try:
+                parsed = datetime.strptime(str(d), '%Y-%m-%d').date()
+                if parsed >= today:
+                    kept.append(str(d))
+            except Exception:
+                pass  # اگه parse نشد، نگه‌دار
+        state['applied_dates'] = kept
 
 
 # ============================================================
